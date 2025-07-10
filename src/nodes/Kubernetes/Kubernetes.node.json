@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-k8s.kubernetes",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Development", "Kubernetes", "Container"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://github.com/kubernetes-client/javascript"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://kubernetes.io/docs/reference/"
+			}
+		]
+	}
+}

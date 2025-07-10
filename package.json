@@ -1,0 +1,60 @@
+{
+  "name": "@chaosimpact/n8n-nodes-k8s",
+  "version": "0.1.0",
+  "description": "n8n community node for Kubernetes cluster management",
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "license": "MIT",
+  "homepage": "",
+  "author": {
+    "name": "HuPo"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chaosimpact/n8n-nodes-k8s.git"
+  },
+  "engines": {
+    "node": ">=20.15"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "npx swc src -d dist --strip-leading-paths && npx ts-node ./scripts/copy.ts",
+    "build:watch": "npx ts-node ./scripts/copy.ts && npx swc src -d dist --strip-leading-paths --watch",
+    "dev": "tsc --watch",
+    "format": "prettier src/nodes src/credentials --write",
+    "lint": "eslint src/nodes src/credentials package.json",
+    "lintfix": "eslint src/nodes src/credentials package.json --fix",
+    "prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js src/nodes src/credentials package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/KubernetesCredentialsApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Kubernetes/Kubernetes.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@swc/cli": "^0.7.7",
+    "@swc/core": "^1.12.9",
+    "@types/glob": "^8.1.0",
+    "@typescript-eslint/parser": "~8.32.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-n8n-nodes-base": "^1.16.3",
+    "gulp": "^5.0.0",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@kubernetes/client-node": "^1.1.2"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
