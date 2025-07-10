@@ -1,5 +1,5 @@
 {
-	"node": "n8n-nodes-k8s.kubernetes",
+	"node": "@chaosimpact/n8n-nodes-k8s.kubernetes",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": ["Development", "Kubernetes", "Container"],
