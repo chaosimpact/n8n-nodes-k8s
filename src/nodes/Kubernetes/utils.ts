@@ -187,7 +187,7 @@ export class K8SClient {
 		jobName: string,
 		namespace = "default",
 		restartPolicy = "Never",
-		cleanupJob = false
+		cleanupJob = true
 	): Promise<any> {
 		const kc = this.kubeConfig;
 		const k8sBatchApi = kc.makeApiClient(k8s.BatchV1Api);
@@ -1228,7 +1228,7 @@ export class K8SClient {
 	async triggerCronJob(
 		cronJobName: string,
 		namespace = "default",
-		cleanupJob = false,
+		cleanupJob = true,
 		overrides?: {
 			command?: string[];
 			args?: string[];

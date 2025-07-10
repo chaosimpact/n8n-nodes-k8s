@@ -202,7 +202,7 @@ export class Kubernetes implements INodeType {
 				displayName: "Cleanup Job",
 				name: "cleanupJob",
 				type: "boolean",
-				default: false,
+				default: true,
 				displayOptions: {
 					show: {
 						operation: ["createJob"],
@@ -239,7 +239,7 @@ export class Kubernetes implements INodeType {
 				displayName: "Cleanup Job",
 				name: "cronJobCleanup",
 				type: "boolean",
-				default: false,
+				default: true,
 				displayOptions: {
 					show: {
 						operation: ["triggerCronJob"],
