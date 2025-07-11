@@ -1,4 +1,4 @@
-import { Writable } from "node:stream";
+import { PassThrough } from "node:stream";
 
 import * as k8s from "@kubernetes/client-node";
 import {
@@ -6,6 +6,20 @@ import {
 	IExecuteFunctions,
 	NodeOperationError,
 } from "n8n-workflow";
+
+// Helper types
+interface SafePromiseHandlers {
+	safeResolve: (value: any) => void;
+	safeReject: (err: any) => void;
+}
+
+interface LogOptions {
+	follow?: boolean;
+	tailLines?: number;
+	pretty?: boolean;
+	timestamps?: boolean;
+	sinceTime?: string;
+}
 
 export class K8SClient {
 	kubeConfig: k8s.KubeConfig;
@@ -110,6 +124,8 @@ export class K8SClient {
 
 		try {
 			const result = await new Promise<string>(async (resolve, reject) => {
+				let podCompleted = false;
+
 				const watchReq = await watch.watch(
 					`/api/v1/namespaces/${namespace}/pods`,
 					{},
@@ -120,52 +136,42 @@ export class K8SClient {
 						const phase = obj.status?.phase;
 						console.log(`[DEBUG] Pod ${podName} phase update: ${phase}`);
 
-						if (phase === "Succeeded" || phase === "Failed") {
+												if (phase === "Succeeded" || phase === "Failed") {
 							console.log(`[DEBUG] Pod ${podName} completed with phase: ${phase}`);
-							let logs = "";
-							const logStream = new Writable({
-								write(chunk, encoding, callback) {
-									logs += chunk.toString();
-									callback();
-								},
-							});
+							podCompleted = true;
 
-							const logApi = new k8s.Log(kc);
-							logApi
-								.log(
-									namespace,
-									podName,
-									"main-container",
-									logStream
-								)
-								.then((req: any) => {
-									console.log(`[DEBUG] Log request started for pod ${podName}`);
-									req.on("error", (err: any) => {
-										console.error(`[DEBUG] Log request error for pod ${podName}:`, err);
-										reject(err);
-									});
-									req.on("complete", () => {
-										console.log(`[DEBUG] Log retrieval completed for pod ${podName}. Logs length: ${logs.length}`);
-										watchReq?.abort();
-										resolve(this.formatOutput(logs));
-									});
-								})
-								.catch((err) => {
-									console.error(`[DEBUG] Log API error for pod ${podName}:`, err);
+							// Use the unified log retrieval method
+							this.retrievePodLogs(podName, namespace, "main-container", {
+								tailLines: 1000
+							}).then((logs) => {
+								// Abort the watch after resolving to avoid race conditions
+								setTimeout(() => {
 									watchReq?.abort();
-									reject(err);
-								});
+								}, 100);
+								resolve(logs);
+							}).catch((err) => {
+								console.error(`[DEBUG] Log API error for pod ${podName}:`, err);
+								setTimeout(() => {
+									watchReq?.abort();
+								}, 100);
+								reject(err);
+							});
 						}
-					},
-					(err) => {
-						console.error(`[DEBUG] Watch error for pod ${podName}:`, err);
-						reject(err);
+									},
+				(err) => {
+					// Don't treat AbortError as a real error if the pod has already completed
+					if (this.isExpectedAbortError(err, podCompleted)) {
+						console.log(`[DEBUG] Pod watch aborted for ${podName} after completion (expected)`);
+						return;
 					}
+					console.error(`[DEBUG] Watch error for pod ${podName}:`, err);
+					reject(err);
+				}
 				);
 			});
 			return result;
 		} catch (e) {
-			if (e.message === "aborted") {
+			if (e.message === "aborted" || e.type === "aborted") {
 				console.log(`[DEBUG] Watch aborted for pod ${podName}`);
 				// This is fine
 				return "";
@@ -328,7 +334,7 @@ export class K8SClient {
 			console.log(`[DEBUG] Job ${finalJobName} completed successfully with result:`, result);
 			return result;
 		} catch (e) {
-			if (e.message === "aborted") {
+			if (e.message === "aborted" || e.type === "aborted") {
 				console.log(`[DEBUG] Job watch was aborted for ${finalJobName}`);
 				// This is fine, job watching was aborted
 				return {
@@ -336,6 +342,7 @@ export class K8SClient {
 					namespace: namespace,
 					status: "unknown",
 					output: "Job watch was aborted",
+					cleaned: false,
 				};
 			} else {
 				console.error(`[DEBUG] Error running job ${finalJobName}:`, e);
@@ -978,16 +985,28 @@ export class K8SClient {
 		const kc = this.kubeConfig;
 		const watch = new k8s.Watch(kc);
 
+		console.log(`[DEBUG] Starting wait for ${kind}/${name} condition: ${condition}`);
+
 		return new Promise(async (resolve, reject) => {
 			let timeoutId: NodeJS.Timeout;
 			let watchReq: any;
+			let resourceCompleted = false;
+
+			const clearTimeoutIfNeeded = () => {
+				if (timeoutId) {
+					clearTimeout(timeoutId);
+				}
+			};
 
 			// Set timeout
 			timeoutId = setTimeout(() => {
-				if (watchReq) {
-					watchReq.abort();
+				if (!resourceCompleted) {
+					console.log(`[DEBUG] Timeout reached for ${kind}/${name}, aborting watch`);
+					if (watchReq) {
+						watchReq.abort();
+					}
+					reject(new Error(`Timeout waiting for ${kind}/${name} condition: ${condition}`));
 				}
-				reject(new Error(`Timeout waiting for ${kind}/${name} condition: ${condition}`));
 			}, timeout);
 
 			try {
@@ -1048,6 +1067,12 @@ export class K8SClient {
 							return;
 						}
 
+						console.log(`[DEBUG] Resource ${kind}/${name} update:`, {
+							type,
+							status: obj.status,
+							conditions: obj.status?.conditions
+						});
+
 						// Check condition based on resource type and condition
 						let conditionMet = false;
 
@@ -1079,28 +1104,44 @@ export class K8SClient {
 						}
 
 						if (conditionMet) {
-							clearTimeout(timeoutId);
-							watchReq.abort();
+							resourceCompleted = true;
+							clearTimeoutIfNeeded();
+
+							console.log(`[DEBUG] Resource ${kind}/${name} condition ${condition} met`);
+
+							// Abort the watch after resolving to avoid race conditions
+							setTimeout(() => {
+								if (watchReq) {
+									watchReq.abort();
+								}
+							}, 100);
+
 							resolve({
 								resource: obj,
 								condition: condition,
 								status: 'met'
 							});
 						}
-					},
-					(err) => {
-						clearTimeout(timeoutId);
-						reject(err);
+									},
+				(err) => {
+					// Don't treat AbortError as a real error if the resource has already completed
+					if (this.isExpectedAbortError(err, resourceCompleted)) {
+						console.log(`[DEBUG] Resource watch aborted for ${kind}/${name} after condition met (expected)`);
+						return;
 					}
+					console.error(`[DEBUG] Resource watch error for ${kind}/${name}:`, err);
+					clearTimeoutIfNeeded();
+					reject(err);
+				}
 				);
 			} catch (error) {
-				clearTimeout(timeoutId);
+				clearTimeoutIfNeeded();
 				reject(error);
 			}
 		});
 	}
 
-		async getLogs(
+	async getLogs(
 		podName: string,
 		namespace: string,
 		containerName?: string,
@@ -1108,9 +1149,6 @@ export class K8SClient {
 		tail?: number,
 		sinceTime?: string
 	): Promise<string> {
-		const kc = this.kubeConfig;
-		const logApi = new k8s.Log(kc);
-
 		console.log(`[DEBUG] getLogs called with:`, {
 			podName,
 			namespace,
@@ -1123,7 +1161,7 @@ export class K8SClient {
 		// If no container name is provided, get the first container from the pod
 		if (!containerName) {
 			try {
-				const k8sCoreApi = kc.makeApiClient(k8s.CoreV1Api);
+				const k8sCoreApi = this.kubeConfig.makeApiClient(k8s.CoreV1Api);
 				const podResponse = await k8sCoreApi.readNamespacedPod({
 					name: podName,
 					namespace: namespace
@@ -1147,55 +1185,11 @@ export class K8SClient {
 			}
 		}
 
-		return new Promise((resolve, reject) => {
-			let logs = "";
-			const logStream = new Writable({
-				write(chunk, encoding, callback) {
-					logs += chunk.toString();
-					callback();
-				},
-			});
-
-			console.log(`[DEBUG] Starting log retrieval for pod ${podName}, container: ${containerName}`);
-
-			// Use the same pattern as other methods in the file
-			logApi.log(
-				namespace,
-				podName,
-				containerName!,
-				logStream
-			).then((req: any) => {
-				console.log(`[DEBUG] Log request started for pod ${podName}`);
-
-				req.on("error", (err: any) => {
-					console.error(`[DEBUG] Log request error for pod ${podName}:`, err);
-					reject(new NodeOperationError(
-						this.func.getNode(),
-						`Failed to get logs for pod "${podName}": ${err.message}`
-					));
-				});
-
-				req.on("complete", () => {
-					console.log(`[DEBUG] Log retrieval completed for pod ${podName}. Logs length: ${logs.length}`);
-					resolve(this.formatOutput(logs));
-				});
-
-				// For follow mode, we need to handle the stream differently
-				if (follow) {
-					// Set a timeout for follow mode to prevent hanging
-					setTimeout(() => {
-						console.log(`[DEBUG] Log follow timeout reached for pod ${podName}, aborting`);
-						req.abort();
-						resolve(this.formatOutput(logs));
-					}, 30000); // 30 seconds timeout for follow mode
-				}
-			}).catch((err) => {
-				console.error(`[DEBUG] Log API error for pod ${podName}:`, err);
-				reject(new NodeOperationError(
-					this.func.getNode(),
-					`Failed to get logs for pod "${podName}" in namespace "${namespace}": ${err.message}`
-				));
-			});
+		// Use the unified log retrieval method
+		return this.retrievePodLogs(podName, namespace, containerName, {
+			follow,
+			tailLines: tail,
+			sinceTime
 		});
 	}
 
@@ -1221,6 +1215,129 @@ export class K8SClient {
 			console.log(`[DEBUG] Output is not valid JSON, returning raw string`);
 			return output;
 		}
+	}
+
+	// Helper to create safe promise handlers that prevent multiple resolve/reject
+	private createSafePromiseHandlers(resolve: Function, reject: Function): SafePromiseHandlers {
+		let resolved = false;
+
+		return {
+			safeResolve: (value: any) => {
+				if (!resolved) {
+					resolved = true;
+					resolve(value);
+				}
+			},
+			safeReject: (err: any) => {
+				if (!resolved) {
+					resolved = true;
+					reject(err);
+				}
+			}
+		};
+	}
+
+	// Helper to check if error is an expected abort error
+	private isExpectedAbortError(err: any, completed: boolean): boolean {
+		return (err.message === "aborted" || err.type === "aborted") && completed;
+	}
+
+	// Helper to validate time format
+	private validateTimeFormat(timeString: string): void {
+		const parsedTime = new Date(timeString);
+		if (isNaN(parsedTime.getTime())) {
+			throw new NodeOperationError(
+				this.func.getNode(),
+				`Invalid time format: ${timeString}. Please use RFC3339 format (e.g., 2024-01-01T00:00:00Z)`
+			);
+		}
+	}
+
+	// Unified log retrieval method
+	private async retrievePodLogs(
+		podName: string,
+		namespace: string,
+		containerName: string,
+		options: LogOptions = {}
+	): Promise<string> {
+		const kc = this.kubeConfig;
+		const logApi = new k8s.Log(kc);
+
+		console.log(`[DEBUG] Starting log retrieval for pod ${podName}, container: ${containerName}`);
+
+		return new Promise((resolve, reject) => {
+			let logs = "";
+			const { safeResolve, safeReject } = this.createSafePromiseHandlers(resolve, reject);
+
+			const logStream = new PassThrough();
+			logStream.on('data', (chunk) => {
+				logs += chunk.toString();
+			});
+
+			logStream.on('end', () => {
+				console.log(`[DEBUG] Log stream ended for pod ${podName}. Logs length: ${logs.length}`);
+				safeResolve(this.formatOutput(logs));
+			});
+
+			logStream.on('error', (err) => {
+				console.error(`[DEBUG] Log stream error for pod ${podName}:`, err);
+				safeReject(new NodeOperationError(
+					this.func.getNode(),
+					`Failed to get logs for pod "${podName}": ${err.message}`
+				));
+			});
+
+			// Build log options
+			const logOptions: any = {
+				pretty: false,
+				timestamps: false,
+				tailLines: options.tailLines || 1000
+			};
+
+			if (options.follow) {
+				logOptions.follow = options.follow;
+			}
+			if (options.sinceTime) {
+				try {
+					this.validateTimeFormat(options.sinceTime);
+					logOptions.sinceTime = options.sinceTime;
+				} catch (error) {
+					console.error(`[DEBUG] Invalid sinceTime format: ${options.sinceTime}`, error);
+					safeReject(error);
+					return;
+				}
+			}
+
+			console.log(`[DEBUG] Log options:`, logOptions);
+
+			// Use the correct API call format
+			logApi.log(
+				namespace,
+				podName,
+				containerName,
+				logStream,
+				logOptions
+			).then((req: any) => {
+				console.log(`[DEBUG] Log request started for pod ${podName}`);
+
+				// Set timeout based on follow mode
+				const timeoutMs = options.follow ? 30000 : 10000;
+				setTimeout(() => {
+					console.log(`[DEBUG] Log timeout reached for pod ${podName}, ending stream`);
+					if (options.follow && req && req.abort) {
+						req.abort();
+					}
+					logStream.end();
+					safeResolve(this.formatOutput(logs));
+				}, timeoutMs);
+			}).catch((err) => {
+				console.error(`[DEBUG] Log API error for pod ${podName}:`, err);
+				safeReject(new NodeOperationError(
+					this.func.getNode(),
+					`Failed to get logs for pod "${podName}" in namespace "${namespace}": ${err.message}`
+				));
+			});
+		});
 	}
 
 	async triggerCronJob(
@@ -1437,7 +1554,7 @@ export class K8SClient {
 			console.log(`[DEBUG] CronJob ${cronJobName} triggered successfully with result:`, result);
 			return result;
 		} catch (e) {
-			if (e.message === "aborted") {
+			if (e.message === "aborted" || e.type === "aborted") {
 				console.log(`[DEBUG] Job watch was aborted for ${finalJobName}`);
 				// This is fine, job watching was aborted
 				return {
@@ -1445,7 +1562,9 @@ export class K8SClient {
 					namespace: namespace,
 					cronJobName: cronJobName,
 					status: "unknown",
-					output: "Job watch was aborted"
+					output: "Job watch was aborted",
+					cleaned: false,
+					overridesApplied: !!overrides
 				};
 			} else {
 				console.error(`[DEBUG] Error running job ${finalJobName}:`, e);
@@ -1460,13 +1579,19 @@ export class K8SClient {
 		namespace: string,
 		timeout: number = 300000
 	): Promise<{ status: string; jobStatus: any }> {
-		const kc = this.kubeConfig;
-		const watch = new k8s.Watch(kc);
+		const watch = new k8s.Watch(this.kubeConfig);
 
 		console.log(`[DEBUG] Starting job completion watch for ${jobName}`);
 
 		return new Promise(async (resolve, reject) => {
 			let jobCompleted = false;
+			let timeoutId: NodeJS.Timeout;
+
+			const clearTimeoutIfNeeded = () => {
+				if (timeoutId) {
+					clearTimeout(timeoutId);
+				}
+			};
 
 			// Watch job status
 			const jobWatchReq = await watch.watch(
@@ -1489,14 +1614,24 @@ export class K8SClient {
 					if (jobStatus?.succeeded || jobStatus?.failed) {
 						jobCompleted = true;
 						clearTimeoutIfNeeded();
-						jobWatchReq?.abort();
 
 						const status = jobStatus.succeeded ? "succeeded" : "failed";
 						console.log(`[DEBUG] Job ${jobName} completed with status: ${status}`);
+
+						// Abort the watch after resolving to avoid race conditions
+						setTimeout(() => {
+							jobWatchReq?.abort();
+						}, 100);
+
 						resolve({ status, jobStatus });
 					}
 				},
 				(err) => {
+					// Don't treat AbortError as a real error if the job has already completed
+					if (this.isExpectedAbortError(err, jobCompleted)) {
+						console.log(`[DEBUG] Job watch aborted for ${jobName} after completion (expected)`);
+						return;
+					}
 					console.error(`[DEBUG] Job watch error for ${jobName}:`, err);
 					clearTimeoutIfNeeded();
 					reject(err);
@@ -1504,31 +1639,23 @@ export class K8SClient {
 			);
 
 			// Set a timeout to avoid waiting indefinitely
-			const timeoutId = setTimeout(() => {
+			timeoutId = setTimeout(() => {
 				if (!jobCompleted) {
 					console.log(`[DEBUG] Job ${jobName} timeout reached, aborting watch`);
 					jobWatchReq?.abort();
 					reject(new Error(`Job ${jobName} did not complete within timeout`));
 				}
 			}, timeout);
-
-			// Clear timeout if job completes
-			const clearTimeoutIfNeeded = () => {
-				if (timeoutId) {
-					clearTimeout(timeoutId);
-				}
-			};
 		});
 	}
 
-	// Helper method to get logs from job pods
+		// Helper method to get logs from job pods
 	private async getJobPodLogs(
 		jobName: string,
 		namespace: string,
 		containerName?: string
 	): Promise<string> {
-		const kc = this.kubeConfig;
-		const k8sCoreApi = kc.makeApiClient(k8s.CoreV1Api);
+		const k8sCoreApi = this.kubeConfig.makeApiClient(k8s.CoreV1Api);
 
 		console.log(`[DEBUG] Getting pod logs for job ${jobName}`);
 
@@ -1575,40 +1702,9 @@ export class K8SClient {
 				}
 			}
 
-			// Get pod logs
-			console.log(`[DEBUG] Retrieving logs for pod ${podName}...`);
-			let logs = "";
-			const logStream = new Writable({
-				write(chunk, encoding, callback) {
-					logs += chunk.toString();
-					callback();
-				},
-			});
-
-			const logApi = new k8s.Log(kc);
-
-			return new Promise((resolve, reject) => {
-				logApi.log(
-					namespace,
-					podName,
-					targetContainerName || '',
-					logStream
-				).then((logReq: any) => {
-					console.log(`[DEBUG] Log request started for pod ${podName}`);
-
-					logReq.on("error", (err: any) => {
-						console.error(`[DEBUG] Log error for pod ${podName}:`, err);
-						reject(err);
-					});
-
-					logReq.on("complete", () => {
-						console.log(`[DEBUG] Log retrieval completed for pod ${podName}. Logs length: ${logs.length}`);
-						resolve(this.formatOutput(logs));
-					});
-				}).catch((logErr) => {
-					console.error(`[DEBUG] Failed to get logs for pod ${podName}:`, logErr);
-					reject(logErr);
-				});
+			// Use the unified log retrieval method
+			return this.retrievePodLogs(podName, namespace, targetContainerName || '', {
+				tailLines: 1000
 			});
 
 		} catch (error) {
