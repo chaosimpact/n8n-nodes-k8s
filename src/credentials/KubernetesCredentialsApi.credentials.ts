@@ -1,10 +1,10 @@
-import { ICredentialType, INodeProperties } from "n8n-workflow";
+import { ICredentialType, INodeProperties, Icon } from "n8n-workflow";
 
 export class KubernetesCredentialsApi implements ICredentialType {
 	name = "kubernetesCredentialsApi";
 	displayName = 'Kubernetes Credentials API';
 	documentationUrl = "https://github.com/kubernetes-client/javascript";
-	icon = "file:k8s.svg";
+	icon: Icon = "file:k8s.svg";
 	properties: INodeProperties[] = [
 		{
 			displayName: "Load From",
