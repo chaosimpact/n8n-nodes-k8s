@@ -95,7 +95,10 @@ export class K8SClient {
 		console.log(`[DEBUG] Creating pod with spec:`, JSON.stringify(podSpec, null, 2));
 
 		try {
-			await k8sCoreApi.createNamespacedPod(namespace, podSpec);
+			await k8sCoreApi.createNamespacedPod({
+				namespace: namespace,
+				body: podSpec
+			});
 			console.log(`[DEBUG] Pod created successfully: ${podName}`);
 		} catch (error) {
 			console.error(`[DEBUG] Failed to create pod ${podName}:`, error);
@@ -135,9 +138,9 @@ export class K8SClient {
 									"main-container",
 									logStream
 								)
-								.then((req) => {
+								.then((req: any) => {
 									console.log(`[DEBUG] Log request started for pod ${podName}`);
-									req.on("error", (err) => {
+									req.on("error", (err: any) => {
 										console.error(`[DEBUG] Log request error for pod ${podName}:`, err);
 										reject(err);
 									});
@@ -173,7 +176,10 @@ export class K8SClient {
 		} finally {
 			console.log(`[DEBUG] Deleting pod ${podName}`);
 			try {
-				await k8sCoreApi.deleteNamespacedPod(podName, namespace);
+				await k8sCoreApi.deleteNamespacedPod({
+					name: podName,
+					namespace: namespace
+				});
 				console.log(`[DEBUG] Pod ${podName} deleted successfully`);
 			} catch (deleteError) {
 				console.error(`[DEBUG] Failed to delete pod ${podName}:`, deleteError);
@@ -266,7 +272,10 @@ export class K8SClient {
 		// Create the job
 		try {
 			console.log(`[DEBUG] Creating job with spec:`, JSON.stringify(jobSpec, null, 2));
-			await k8sBatchApi.createNamespacedJob(namespace, jobSpec);
+			await k8sBatchApi.createNamespacedJob({
+				namespace: namespace,
+				body: jobSpec
+			});
 			console.log(`[DEBUG] Job created successfully: ${finalJobName}`);
 		} catch (error) {
 			console.error(`[DEBUG] Failed to create job ${finalJobName}:`, error);
@@ -297,7 +306,10 @@ export class K8SClient {
 			if (cleanupJob) {
 				console.log(`[DEBUG] Cleaning up job ${finalJobName}`);
 				try {
-					await k8sBatchApi.deleteNamespacedJob(finalJobName, namespace);
+					await k8sBatchApi.deleteNamespacedJob({
+						name: finalJobName,
+						namespace: namespace
+					});
 					console.log(`[DEBUG] Job ${finalJobName} cleaned up successfully`);
 				} catch (cleanupErr) {
 					// Don't fail the whole operation if cleanup fails
@@ -361,23 +373,13 @@ export class K8SClient {
 				case 'pod':
 					try {
 						console.log(`[DEBUG] Patching pod ${name} in namespace ${namespace}`);
-						const patchedPod = await coreApi.patchNamespacedPod(
-							name,
-							namespace,
-							patchData,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							{
-								headers: {
-									'Content-Type': 'application/merge-patch+json',
-								},
-							}
-						);
-						console.log(`[DEBUG] Pod patch successful:`, patchedPod.body);
-						return patchedPod.body;
+						const patchedPod = await coreApi.patchNamespacedPod({
+							name: name,
+							namespace: namespace,
+							body: patchData
+						});
+						console.log(`[DEBUG] Pod patch successful:`, patchedPod);
+						return patchedPod;
 					} catch (error) {
 						console.error(`[DEBUG] Pod patch failed:`, error);
 						throw new NodeOperationError(
@@ -388,23 +390,13 @@ export class K8SClient {
 				case 'service':
 					try {
 						console.log(`[DEBUG] Patching service ${name} in namespace ${namespace}`);
-						const patchedService = await coreApi.patchNamespacedService(
-							name,
-							namespace,
-							patchData,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							{
-								headers: {
-									'Content-Type': 'application/merge-patch+json',
-								},
-							}
-						);
-						console.log(`[DEBUG] Service patch successful:`, patchedService.body);
-						return patchedService.body;
+						const patchedService = await coreApi.patchNamespacedService({
+							name: name,
+							namespace: namespace,
+							body: patchData
+						});
+						console.log(`[DEBUG] Service patch successful:`, patchedService);
+						return patchedService;
 					} catch (error) {
 						console.error(`[DEBUG] Service patch failed:`, error);
 						throw new NodeOperationError(
@@ -415,23 +407,13 @@ export class K8SClient {
 				case 'configmap':
 					try {
 						console.log(`[DEBUG] Patching configmap ${name} in namespace ${namespace}`);
-						const patchedConfigMap = await coreApi.patchNamespacedConfigMap(
-							name,
-							namespace,
-							patchData,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							{
-								headers: {
-									'Content-Type': 'application/merge-patch+json',
-								},
-							}
-						);
-						console.log(`[DEBUG] ConfigMap patch successful:`, patchedConfigMap.body);
-						return patchedConfigMap.body;
+						const patchedConfigMap = await coreApi.patchNamespacedConfigMap({
+							name: name,
+							namespace: namespace,
+							body: patchData
+						});
+						console.log(`[DEBUG] ConfigMap patch successful:`, patchedConfigMap);
+						return patchedConfigMap;
 					} catch (error) {
 						console.error(`[DEBUG] ConfigMap patch failed:`, error);
 						throw new NodeOperationError(
@@ -455,23 +437,13 @@ export class K8SClient {
 						console.log(`[DEBUG] Patching deployment ${name} in namespace ${namespace}`);
 						console.log(`[DEBUG] Patch data:`, JSON.stringify(patchData, null, 2));
 
-						const patchedDeployment = await appsApi.patchNamespacedDeployment(
-							name,
-							namespace,
-							patchData,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							{
-								headers: {
-									'Content-Type': 'application/merge-patch+json',
-								},
-							}
-						);
-						console.log(`[DEBUG] Deployment patch successful:`, patchedDeployment.body);
-						return patchedDeployment.body;
+						const patchedDeployment = await appsApi.patchNamespacedDeployment({
+							name: name,
+							namespace: namespace,
+							body: patchData
+						});
+						console.log(`[DEBUG] Deployment patch successful:`, patchedDeployment);
+						return patchedDeployment;
 					} catch (error) {
 						console.error(`[DEBUG] Deployment patch failed:`, {
 							name,
@@ -488,23 +460,13 @@ export class K8SClient {
 				case 'replicaset':
 					try {
 						console.log(`[DEBUG] Patching replicaset ${name} in namespace ${namespace}`);
-						const patchedReplicaSet = await appsApi.patchNamespacedReplicaSet(
-							name,
-							namespace,
-							patchData,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							{
-								headers: {
-									'Content-Type': 'application/merge-patch+json',
-								},
-							}
-						);
-						console.log(`[DEBUG] ReplicaSet patch successful:`, patchedReplicaSet.body);
-						return patchedReplicaSet.body;
+						const patchedReplicaSet = await appsApi.patchNamespacedReplicaSet({
+							name: name,
+							namespace: namespace,
+							body: patchData
+						});
+						console.log(`[DEBUG] ReplicaSet patch successful:`, patchedReplicaSet);
+						return patchedReplicaSet;
 					} catch (error) {
 						console.error(`[DEBUG] ReplicaSet patch failed:`, error);
 						throw new NodeOperationError(
@@ -515,23 +477,13 @@ export class K8SClient {
 				case 'daemonset':
 					try {
 						console.log(`[DEBUG] Patching daemonset ${name} in namespace ${namespace}`);
-						const patchedDaemonSet = await appsApi.patchNamespacedDaemonSet(
-							name,
-							namespace,
-							patchData,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							{
-								headers: {
-									'Content-Type': 'application/merge-patch+json',
-								},
-							}
-						);
-						console.log(`[DEBUG] DaemonSet patch successful:`, patchedDaemonSet.body);
-						return patchedDaemonSet.body;
+						const patchedDaemonSet = await appsApi.patchNamespacedDaemonSet({
+							name: name,
+							namespace: namespace,
+							body: patchData
+						});
+						console.log(`[DEBUG] DaemonSet patch successful:`, patchedDaemonSet);
+						return patchedDaemonSet;
 					} catch (error) {
 						console.error(`[DEBUG] DaemonSet patch failed:`, error);
 						throw new NodeOperationError(
@@ -542,23 +494,13 @@ export class K8SClient {
 				case 'statefulset':
 					try {
 						console.log(`[DEBUG] Patching statefulset ${name} in namespace ${namespace}`);
-						const patchedStatefulSet = await appsApi.patchNamespacedStatefulSet(
-							name,
-							namespace,
-							patchData,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							undefined,
-							{
-								headers: {
-									'Content-Type': 'application/merge-patch+json',
-								},
-							}
-						);
-						console.log(`[DEBUG] StatefulSet patch successful:`, patchedStatefulSet.body);
-						return patchedStatefulSet.body;
+						const patchedStatefulSet = await appsApi.patchNamespacedStatefulSet({
+							name: name,
+							namespace: namespace,
+							body: patchData
+						});
+						console.log(`[DEBUG] StatefulSet patch successful:`, patchedStatefulSet);
+						return patchedStatefulSet;
 					} catch (error) {
 						console.error(`[DEBUG] StatefulSet patch failed:`, error);
 						throw new NodeOperationError(
@@ -577,22 +519,14 @@ export class K8SClient {
 			try {
 				console.log(`[DEBUG] Using CustomObjectsApi for ${apiVersion}/${kind}`);
 				const [group, version] = apiVersion.split('/');
-				const response = await customObjectsApi.patchNamespacedCustomObject(
-					group,
-					version,
-					namespace,
-					kind.toLowerCase() + 's', // Pluralize the kind
-					name,
-					patchData,
-					undefined,
-					undefined,
-					undefined,
-					{
-						headers: {
-							'Content-Type': 'application/merge-patch+json',
-						},
-					}
-				);
+				const response = await customObjectsApi.patchNamespacedCustomObject({
+					group: group,
+					version: version,
+					namespace: namespace,
+					plural: kind.toLowerCase() + 's', // Pluralize the kind
+					name: name,
+					body: patchData
+				});
 				console.log(`[DEBUG] Custom resource patch successful:`, response.body);
 				return response.body;
 			} catch (error) {
@@ -629,9 +563,12 @@ export class K8SClient {
 				case 'pod':
 					try {
 						console.log(`[DEBUG] Getting pod ${name} in namespace ${namespace}`);
-						const pod = await coreApi.readNamespacedPod(name, namespace);
+						const pod = await coreApi.readNamespacedPod({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] Pod retrieved successfully`);
-						return pod.body;
+						return pod;
 					} catch (error) {
 						console.error(`[DEBUG] Pod retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -642,9 +579,12 @@ export class K8SClient {
 				case 'service':
 					try {
 						console.log(`[DEBUG] Getting service ${name} in namespace ${namespace}`);
-						const service = await coreApi.readNamespacedService(name, namespace);
+						const service = await coreApi.readNamespacedService({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] Service retrieved successfully`);
-						return service.body;
+						return service;
 					} catch (error) {
 						console.error(`[DEBUG] Service retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -655,9 +595,12 @@ export class K8SClient {
 				case 'configmap':
 					try {
 						console.log(`[DEBUG] Getting configmap ${name} in namespace ${namespace}`);
-						const configMap = await coreApi.readNamespacedConfigMap(name, namespace);
+						const configMap = await coreApi.readNamespacedConfigMap({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] ConfigMap retrieved successfully`);
-						return configMap.body;
+						return configMap;
 					} catch (error) {
 						console.error(`[DEBUG] ConfigMap retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -668,9 +611,12 @@ export class K8SClient {
 				case 'secret':
 					try {
 						console.log(`[DEBUG] Getting secret ${name} in namespace ${namespace}`);
-						const secret = await coreApi.readNamespacedSecret(name, namespace);
+						const secret = await coreApi.readNamespacedSecret({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] Secret retrieved successfully`);
-						return secret.body;
+						return secret;
 					} catch (error) {
 						console.error(`[DEBUG] Secret retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -692,9 +638,12 @@ export class K8SClient {
 				case 'deployment':
 					try {
 						console.log(`[DEBUG] Getting deployment ${name} in namespace ${namespace}`);
-						const deployment = await appsApi.readNamespacedDeployment(name, namespace);
+						const deployment = await appsApi.readNamespacedDeployment({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] Deployment retrieved successfully`);
-						return deployment.body;
+						return deployment;
 					} catch (error) {
 						console.error(`[DEBUG] Deployment retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -705,9 +654,12 @@ export class K8SClient {
 				case 'replicaset':
 					try {
 						console.log(`[DEBUG] Getting replicaset ${name} in namespace ${namespace}`);
-						const replicaSet = await appsApi.readNamespacedReplicaSet(name, namespace);
+						const replicaSet = await appsApi.readNamespacedReplicaSet({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] ReplicaSet retrieved successfully`);
-						return replicaSet.body;
+						return replicaSet;
 					} catch (error) {
 						console.error(`[DEBUG] ReplicaSet retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -718,9 +670,12 @@ export class K8SClient {
 				case 'daemonset':
 					try {
 						console.log(`[DEBUG] Getting daemonset ${name} in namespace ${namespace}`);
-						const daemonSet = await appsApi.readNamespacedDaemonSet(name, namespace);
+						const daemonSet = await appsApi.readNamespacedDaemonSet({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] DaemonSet retrieved successfully`);
-						return daemonSet.body;
+						return daemonSet;
 					} catch (error) {
 						console.error(`[DEBUG] DaemonSet retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -731,9 +686,12 @@ export class K8SClient {
 				case 'statefulset':
 					try {
 						console.log(`[DEBUG] Getting statefulset ${name} in namespace ${namespace}`);
-						const statefulSet = await appsApi.readNamespacedStatefulSet(name, namespace);
+						const statefulSet = await appsApi.readNamespacedStatefulSet({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] StatefulSet retrieved successfully`);
-						return statefulSet.body;
+						return statefulSet;
 					} catch (error) {
 						console.error(`[DEBUG] StatefulSet retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -755,9 +713,12 @@ export class K8SClient {
 				case 'job':
 					try {
 						console.log(`[DEBUG] Getting job ${name} in namespace ${namespace}`);
-						const job = await batchApi.readNamespacedJob(name, namespace);
+						const job = await batchApi.readNamespacedJob({
+							name: name,
+							namespace: namespace
+						});
 						console.log(`[DEBUG] Job retrieved successfully`);
-						return job.body;
+						return job;
 					} catch (error) {
 						console.error(`[DEBUG] Job retrieval failed:`, error);
 						throw new NodeOperationError(
@@ -779,13 +740,13 @@ export class K8SClient {
 				const [group, version] = apiVersion.split('/');
 				console.log(`[DEBUG] Getting custom resource ${name} in namespace ${namespace} (group: ${group}, version: ${version})`);
 
-				const response = await customObjectsApi.getNamespacedCustomObject(
-					group,
-					version,
-					namespace,
-					kind.toLowerCase() + 's', // Pluralize the kind
-					name
-				);
+				const response = await customObjectsApi.getNamespacedCustomObject({
+					group: group,
+					version: version,
+					namespace: namespace,
+					plural: kind.toLowerCase() + 's', // Pluralize the kind
+					name: name
+				});
 				console.log(`[DEBUG] Custom resource retrieved successfully`);
 				return response.body;
 			} catch (error) {
@@ -820,9 +781,11 @@ export class K8SClient {
 				case 'pod':
 					try {
 						console.log(`[DEBUG] Listing pods in namespace ${namespace}`);
-						const pods = await coreApi.listNamespacedPod(namespace);
-						console.log(`[DEBUG] Pods listed successfully, found ${pods.body.items?.length || 0} pods`);
-						return pods.body;
+						const pods = await coreApi.listNamespacedPod({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] Pods listed successfully, found ${pods.items?.length || 0} pods`);
+						return pods;
 					} catch (error) {
 						console.error(`[DEBUG] Pod listing failed:`, error);
 						throw new NodeOperationError(
@@ -833,9 +796,11 @@ export class K8SClient {
 				case 'service':
 					try {
 						console.log(`[DEBUG] Listing services in namespace ${namespace}`);
-						const services = await coreApi.listNamespacedService(namespace);
-						console.log(`[DEBUG] Services listed successfully, found ${services.body.items?.length || 0} services`);
-						return services.body;
+						const services = await coreApi.listNamespacedService({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] Services listed successfully, found ${services.items?.length || 0} services`);
+						return services;
 					} catch (error) {
 						console.error(`[DEBUG] Service listing failed:`, error);
 						throw new NodeOperationError(
@@ -846,9 +811,11 @@ export class K8SClient {
 				case 'configmap':
 					try {
 						console.log(`[DEBUG] Listing configmaps in namespace ${namespace}`);
-						const configMaps = await coreApi.listNamespacedConfigMap(namespace);
-						console.log(`[DEBUG] ConfigMaps listed successfully, found ${configMaps.body.items?.length || 0} configmaps`);
-						return configMaps.body;
+						const configMaps = await coreApi.listNamespacedConfigMap({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] ConfigMaps listed successfully, found ${configMaps.items?.length || 0} configmaps`);
+						return configMaps;
 					} catch (error) {
 						console.error(`[DEBUG] ConfigMap listing failed:`, error);
 						throw new NodeOperationError(
@@ -859,9 +826,11 @@ export class K8SClient {
 				case 'secret':
 					try {
 						console.log(`[DEBUG] Listing secrets in namespace ${namespace}`);
-						const secrets = await coreApi.listNamespacedSecret(namespace);
-						console.log(`[DEBUG] Secrets listed successfully, found ${secrets.body.items?.length || 0} secrets`);
-						return secrets.body;
+						const secrets = await coreApi.listNamespacedSecret({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] Secrets listed successfully, found ${secrets.items?.length || 0} secrets`);
+						return secrets;
 					} catch (error) {
 						console.error(`[DEBUG] Secret listing failed:`, error);
 						throw new NodeOperationError(
@@ -883,9 +852,11 @@ export class K8SClient {
 				case 'deployment':
 					try {
 						console.log(`[DEBUG] Listing deployments in namespace ${namespace}`);
-						const deployments = await appsApi.listNamespacedDeployment(namespace);
-						console.log(`[DEBUG] Deployments listed successfully, found ${deployments.body.items?.length || 0} deployments`);
-						return deployments.body;
+						const deployments = await appsApi.listNamespacedDeployment({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] Deployments listed successfully, found ${deployments.items?.length || 0} deployments`);
+						return deployments;
 					} catch (error) {
 						console.error(`[DEBUG] Deployment listing failed:`, error);
 						throw new NodeOperationError(
@@ -896,9 +867,11 @@ export class K8SClient {
 				case 'replicaset':
 					try {
 						console.log(`[DEBUG] Listing replicasets in namespace ${namespace}`);
-						const replicaSets = await appsApi.listNamespacedReplicaSet(namespace);
-						console.log(`[DEBUG] ReplicaSets listed successfully, found ${replicaSets.body.items?.length || 0} replicasets`);
-						return replicaSets.body;
+						const replicaSets = await appsApi.listNamespacedReplicaSet({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] ReplicaSets listed successfully, found ${replicaSets.items?.length || 0} replicasets`);
+						return replicaSets;
 					} catch (error) {
 						console.error(`[DEBUG] ReplicaSet listing failed:`, error);
 						throw new NodeOperationError(
@@ -909,9 +882,11 @@ export class K8SClient {
 				case 'daemonset':
 					try {
 						console.log(`[DEBUG] Listing daemonsets in namespace ${namespace}`);
-						const daemonSets = await appsApi.listNamespacedDaemonSet(namespace);
-						console.log(`[DEBUG] DaemonSets listed successfully, found ${daemonSets.body.items?.length || 0} daemonsets`);
-						return daemonSets.body;
+						const daemonSets = await appsApi.listNamespacedDaemonSet({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] DaemonSets listed successfully, found ${daemonSets.items?.length || 0} daemonsets`);
+						return daemonSets;
 					} catch (error) {
 						console.error(`[DEBUG] DaemonSet listing failed:`, error);
 						throw new NodeOperationError(
@@ -922,9 +897,11 @@ export class K8SClient {
 				case 'statefulset':
 					try {
 						console.log(`[DEBUG] Listing statefulsets in namespace ${namespace}`);
-						const statefulSets = await appsApi.listNamespacedStatefulSet(namespace);
-						console.log(`[DEBUG] StatefulSets listed successfully, found ${statefulSets.body.items?.length || 0} statefulsets`);
-						return statefulSets.body;
+						const statefulSets = await appsApi.listNamespacedStatefulSet({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] StatefulSets listed successfully, found ${statefulSets.items?.length || 0} statefulsets`);
+						return statefulSets;
 					} catch (error) {
 						console.error(`[DEBUG] StatefulSet listing failed:`, error);
 						throw new NodeOperationError(
@@ -946,9 +923,11 @@ export class K8SClient {
 				case 'job':
 					try {
 						console.log(`[DEBUG] Listing jobs in namespace ${namespace}`);
-						const jobs = await batchApi.listNamespacedJob(namespace);
-						console.log(`[DEBUG] Jobs listed successfully, found ${jobs.body.items?.length || 0} jobs`);
-						return jobs.body;
+						const jobs = await batchApi.listNamespacedJob({
+							namespace: namespace
+						});
+						console.log(`[DEBUG] Jobs listed successfully, found ${jobs.items?.length || 0} jobs`);
+						return jobs;
 					} catch (error) {
 						console.error(`[DEBUG] Job listing failed:`, error);
 						throw new NodeOperationError(
@@ -970,12 +949,12 @@ export class K8SClient {
 				const [group, version] = apiVersion.split('/');
 				console.log(`[DEBUG] Listing custom resources in namespace ${namespace} (group: ${group}, version: ${version})`);
 
-				const response = await customObjectsApi.listNamespacedCustomObject(
-					group,
-					version,
-					namespace,
-					kind.toLowerCase() + 's' // Pluralize the kind
-				);
+				const response = await customObjectsApi.listNamespacedCustomObject({
+					group: group,
+					version: version,
+					namespace: namespace,
+					plural: kind.toLowerCase() + 's' // Pluralize the kind
+				});
 				console.log(`[DEBUG] Custom resources listed successfully, found ${(response.body as any).items?.length || 0} resources`);
 				return response.body;
 			} catch (error) {
@@ -1121,7 +1100,7 @@ export class K8SClient {
 		});
 	}
 
-	async getLogs(
+		async getLogs(
 		podName: string,
 		namespace: string,
 		containerName?: string,
@@ -1141,6 +1120,33 @@ export class K8SClient {
 			sinceTime
 		});
 
+		// If no container name is provided, get the first container from the pod
+		if (!containerName) {
+			try {
+				const k8sCoreApi = kc.makeApiClient(k8s.CoreV1Api);
+				const podResponse = await k8sCoreApi.readNamespacedPod({
+					name: podName,
+					namespace: namespace
+				});
+
+				if (podResponse.spec?.containers && podResponse.spec.containers.length > 0) {
+					containerName = podResponse.spec.containers[0].name;
+					console.log(`[DEBUG] Using first container: ${containerName}`);
+				} else {
+					throw new NodeOperationError(
+						this.func.getNode(),
+						`Pod "${podName}" has no containers`
+					);
+				}
+			} catch (error) {
+				console.error(`[DEBUG] Failed to get pod details for ${podName}:`, error);
+				throw new NodeOperationError(
+					this.func.getNode(),
+					`Failed to get pod details for "${podName}": ${error.message}`
+				);
+			}
+		}
+
 		return new Promise((resolve, reject) => {
 			let logs = "";
 			const logStream = new Writable({
@@ -1150,34 +1156,23 @@ export class K8SClient {
 				},
 			});
 
-			const logOptions: any = {};
-			if (containerName) {
-				logOptions.container = containerName;
-			}
-			if (follow) {
-				logOptions.follow = follow;
-			}
-			if (tail !== undefined) {
-				logOptions.tailLines = tail;
-			}
-			if (sinceTime) {
-				logOptions.sinceTime = sinceTime;
-			}
+			console.log(`[DEBUG] Starting log retrieval for pod ${podName}, container: ${containerName}`);
 
-			console.log(`[DEBUG] Log options:`, logOptions);
-
+			// Use the same pattern as other methods in the file
 			logApi.log(
 				namespace,
 				podName,
-				containerName || '',
-				logStream,
-				logOptions
-			).then((req) => {
+				containerName!,
+				logStream
+			).then((req: any) => {
 				console.log(`[DEBUG] Log request started for pod ${podName}`);
 
-				req.on("error", (err) => {
+				req.on("error", (err: any) => {
 					console.error(`[DEBUG] Log request error for pod ${podName}:`, err);
-					reject(err);
+					reject(new NodeOperationError(
+						this.func.getNode(),
+						`Failed to get logs for pod "${podName}": ${err.message}`
+					));
 				});
 
 				req.on("complete", () => {
@@ -1196,7 +1191,10 @@ export class K8SClient {
 				}
 			}).catch((err) => {
 				console.error(`[DEBUG] Log API error for pod ${podName}:`, err);
-				reject(err);
+				reject(new NodeOperationError(
+					this.func.getNode(),
+					`Failed to get logs for pod "${podName}" in namespace "${namespace}": ${err.message}`
+				));
 			});
 		});
 	}
@@ -1250,13 +1248,12 @@ export class K8SClient {
 		try {
 			console.log(`[DEBUG] Getting CronJob ${cronJobName} from namespace ${namespace}`);
 
-			// Use custom objects API for CronJob since it might not be in standard BatchV1Api
-			const k8sCustomApi = kc.makeApiClient(k8s.CustomObjectsApi);
-			const cronJobResponse = await k8sCustomApi.getNamespacedCustomObject(
-				'batch', 'v1', namespace, 'cronjobs', cronJobName
-			);
-			cronJob = cronJobResponse.body as k8s.V1CronJob;
-			console.log(`[DEBUG] CronJob retrieved successfully from custom objects API`);
+			// Use BatchV1Api for CronJob (available since Kubernetes 1.21)
+			cronJob = await k8sBatchApi.readNamespacedCronJob({
+				name: cronJobName,
+				namespace: namespace
+			});
+			console.log(`[DEBUG] CronJob retrieved successfully from BatchV1Api`);
 		} catch (error) {
 			console.error(`[DEBUG] Failed to get CronJob ${cronJobName}:`, error);
 			throw new NodeOperationError(
@@ -1381,7 +1378,10 @@ export class K8SClient {
 
 		// Create the job
 		try {
-			const jobResponse = await k8sBatchApi.createNamespacedJob(namespace, jobSpec);
+			await k8sBatchApi.createNamespacedJob({
+				namespace: namespace,
+				body: jobSpec
+			});
 			console.log(`[DEBUG] Job created successfully: ${finalJobName}`);
 		} catch (error) {
 			console.error(`[DEBUG] Failed to create job ${finalJobName} from CronJob ${cronJobName}:`, error);
@@ -1412,7 +1412,10 @@ export class K8SClient {
 			if (cleanupJob) {
 				console.log(`[DEBUG] Cleaning up job ${finalJobName}`);
 				try {
-					await k8sBatchApi.deleteNamespacedJob(finalJobName, namespace);
+					await k8sBatchApi.deleteNamespacedJob({
+						name: finalJobName,
+						namespace: namespace
+					});
 					console.log(`[DEBUG] Job ${finalJobName} cleaned up successfully`);
 				} catch (cleanupErr) {
 					// Don't fail the whole operation if cleanup fails
@@ -1534,35 +1537,27 @@ export class K8SClient {
 			let podsResponse;
 			try {
 				console.log(`[DEBUG] Searching for pods with label job-name=${jobName}`);
-				podsResponse = await k8sCoreApi.listNamespacedPod(
-					namespace,
-					undefined,
-					undefined,
-					undefined,
-					undefined,
-					`job-name=${jobName}`
-				);
+				podsResponse = await k8sCoreApi.listNamespacedPod({
+					namespace: namespace,
+					labelSelector: `job-name=${jobName}`
+				});
 			} catch (labelErr) {
 				console.log(`[DEBUG] Fallback: Searching for pods with label batch.kubernetes.io/job-name=${jobName}`);
 				// Fallback: try with batch.kubernetes.io/job-name label
-				podsResponse = await k8sCoreApi.listNamespacedPod(
-					namespace,
-					undefined,
-					undefined,
-					undefined,
-					undefined,
-					`batch.kubernetes.io/job-name=${jobName}`
-				);
+				podsResponse = await k8sCoreApi.listNamespacedPod({
+					namespace: namespace,
+					labelSelector: `batch.kubernetes.io/job-name=${jobName}`
+				});
 			}
 
-			console.log(`[DEBUG] Found ${podsResponse.body.items?.length || 0} pods for job ${jobName}`);
+			console.log(`[DEBUG] Found ${podsResponse.items?.length || 0} pods for job ${jobName}`);
 
-			if (!podsResponse.body.items || podsResponse.body.items.length === 0) {
+			if (!podsResponse.items || podsResponse.items.length === 0) {
 				console.log(`[DEBUG] No pods found for job ${jobName}`);
 				return `No pods found for job ${jobName}`;
 			}
 
-			const podName = podsResponse.body.items[0].metadata?.name;
+			const podName = podsResponse.items[0].metadata?.name;
 			if (!podName) {
 				console.log(`[DEBUG] No pod name found for job ${jobName}`);
 				return `No pod name found for job ${jobName}`;
@@ -1573,7 +1568,7 @@ export class K8SClient {
 			// Determine container name if not provided
 			let targetContainerName = containerName;
 			if (!targetContainerName) {
-				const podDetail = podsResponse.body.items[0];
+				const podDetail = podsResponse.items[0];
 				if (podDetail?.spec?.containers && podDetail.spec.containers.length > 0) {
 					targetContainerName = podDetail.spec.containers[0].name;
 					console.log(`[DEBUG] Using container name: ${targetContainerName}`);
@@ -1598,10 +1593,10 @@ export class K8SClient {
 					podName,
 					targetContainerName || '',
 					logStream
-				).then((logReq) => {
+				).then((logReq: any) => {
 					console.log(`[DEBUG] Log request started for pod ${podName}`);
 
-					logReq.on("error", (err) => {
+					logReq.on("error", (err: any) => {
 						console.error(`[DEBUG] Log error for pod ${podName}:`, err);
 						reject(err);
 					});
