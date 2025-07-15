@@ -1712,4 +1712,394 @@ export class K8SClient {
 			throw error;
 		}
 	}
+
+	async createResource(
+		apiVersion: string,
+		kind: string,
+		name: string,
+		namespace: string,
+		resourceData: any
+	): Promise<any> {
+		const kc = this.kubeConfig;
+
+		console.log(`[DEBUG] createResource called with:`, {
+			apiVersion,
+			kind,
+			name,
+			namespace,
+			resourceData: JSON.stringify(resourceData, null, 2)
+		});
+
+		// Clean up the resource data by removing runtime fields
+		const cleanedResourceData = this.cleanResourceData(resourceData);
+		
+		console.log(`[DEBUG] Cleaned resource data:`, {
+			cleanedResourceData: JSON.stringify(cleanedResourceData, null, 2)
+		});
+
+		// Handle core resources
+		if (apiVersion === 'v1') {
+			const coreApi = kc.makeApiClient(k8s.CoreV1Api);
+			console.log(`[DEBUG] Using CoreV1Api for ${kind}`);
+
+			switch (kind.toLowerCase()) {
+				case 'pod':
+					try {
+						console.log(`[DEBUG] Creating pod ${name} in namespace ${namespace}`);
+						const createdPod = await coreApi.createNamespacedPod({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] Pod created successfully:`, createdPod);
+						return createdPod;
+					} catch (error) {
+						console.error(`[DEBUG] Pod creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create pod "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'service':
+					try {
+						console.log(`[DEBUG] Creating service ${name} in namespace ${namespace}`);
+						const createdService = await coreApi.createNamespacedService({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] Service created successfully:`, createdService);
+						return createdService;
+					} catch (error) {
+						console.error(`[DEBUG] Service creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create service "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'configmap':
+					try {
+						console.log(`[DEBUG] Creating configmap ${name} in namespace ${namespace}`);
+						const createdConfigMap = await coreApi.createNamespacedConfigMap({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] ConfigMap created successfully:`, createdConfigMap);
+						return createdConfigMap;
+					} catch (error) {
+						console.error(`[DEBUG] ConfigMap creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create configmap "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'secret':
+					try {
+						console.log(`[DEBUG] Creating secret ${name} in namespace ${namespace}`);
+						const createdSecret = await coreApi.createNamespacedSecret({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] Secret created successfully:`, createdSecret);
+						return createdSecret;
+					} catch (error) {
+						console.error(`[DEBUG] Secret creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create secret "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'persistentvolumeclaim':
+					try {
+						console.log(`[DEBUG] Creating persistentvolumeclaim ${name} in namespace ${namespace}`);
+						const createdPvc = await coreApi.createNamespacedPersistentVolumeClaim({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] PersistentVolumeClaim created successfully:`, createdPvc);
+						return createdPvc;
+					} catch (error) {
+						console.error(`[DEBUG] PersistentVolumeClaim creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create persistentvolumeclaim "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'namespace':
+					try {
+						console.log(`[DEBUG] Creating namespace ${name}`);
+						const createdNamespace = await coreApi.createNamespace({
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] Namespace created successfully:`, createdNamespace);
+						return createdNamespace;
+					} catch (error) {
+						console.error(`[DEBUG] Namespace creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create namespace "${name}": ${error.message}`
+						);
+					}
+				default:
+					throw new NodeOperationError(
+						this.func.getNode(),
+						`Unsupported core resource type: ${kind}`
+					);
+			}
+		} else if (apiVersion === 'apps/v1') {
+			const appsApi = kc.makeApiClient(k8s.AppsV1Api);
+			console.log(`[DEBUG] Using AppsV1Api for ${kind}`);
+
+			switch (kind.toLowerCase()) {
+				case 'deployment':
+					try {
+						console.log(`[DEBUG] Creating deployment ${name} in namespace ${namespace}`);
+						const createdDeployment = await appsApi.createNamespacedDeployment({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] Deployment created successfully:`, createdDeployment);
+						return createdDeployment;
+					} catch (error) {
+						console.error(`[DEBUG] Deployment creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create deployment "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'replicaset':
+					try {
+						console.log(`[DEBUG] Creating replicaset ${name} in namespace ${namespace}`);
+						const createdReplicaSet = await appsApi.createNamespacedReplicaSet({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] ReplicaSet created successfully:`, createdReplicaSet);
+						return createdReplicaSet;
+					} catch (error) {
+						console.error(`[DEBUG] ReplicaSet creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create replicaset "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'daemonset':
+					try {
+						console.log(`[DEBUG] Creating daemonset ${name} in namespace ${namespace}`);
+						const createdDaemonSet = await appsApi.createNamespacedDaemonSet({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] DaemonSet created successfully:`, createdDaemonSet);
+						return createdDaemonSet;
+					} catch (error) {
+						console.error(`[DEBUG] DaemonSet creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create daemonset "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'statefulset':
+					try {
+						console.log(`[DEBUG] Creating statefulset ${name} in namespace ${namespace}`);
+						const createdStatefulSet = await appsApi.createNamespacedStatefulSet({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] StatefulSet created successfully:`, createdStatefulSet);
+						return createdStatefulSet;
+					} catch (error) {
+						console.error(`[DEBUG] StatefulSet creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create statefulset "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				default:
+					throw new NodeOperationError(
+						this.func.getNode(),
+						`Unsupported apps resource type: ${kind}`
+					);
+			}
+		} else if (apiVersion === 'batch/v1') {
+			const batchApi = kc.makeApiClient(k8s.BatchV1Api);
+			console.log(`[DEBUG] Using BatchV1Api for ${kind}`);
+
+			switch (kind.toLowerCase()) {
+				case 'job':
+					try {
+						console.log(`[DEBUG] Creating job ${name} in namespace ${namespace}`);
+						const createdJob = await batchApi.createNamespacedJob({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] Job created successfully:`, createdJob);
+						return createdJob;
+					} catch (error) {
+						console.error(`[DEBUG] Job creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create job "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'cronjob':
+					try {
+						console.log(`[DEBUG] Creating cronjob ${name} in namespace ${namespace}`);
+						const createdCronJob = await batchApi.createNamespacedCronJob({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] CronJob created successfully:`, createdCronJob);
+						return createdCronJob;
+					} catch (error) {
+						console.error(`[DEBUG] CronJob creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create cronjob "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				default:
+					throw new NodeOperationError(
+						this.func.getNode(),
+						`Unsupported batch resource type: ${kind}`
+					);
+			}
+		} else if (apiVersion === 'networking.k8s.io/v1') {
+			const networkingApi = kc.makeApiClient(k8s.NetworkingV1Api);
+			console.log(`[DEBUG] Using NetworkingV1Api for ${kind}`);
+
+			switch (kind.toLowerCase()) {
+				case 'ingress':
+					try {
+						console.log(`[DEBUG] Creating ingress ${name} in namespace ${namespace}`);
+						const createdIngress = await networkingApi.createNamespacedIngress({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] Ingress created successfully:`, createdIngress);
+						return createdIngress;
+					} catch (error) {
+						console.error(`[DEBUG] Ingress creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create ingress "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				case 'networkpolicy':
+					try {
+						console.log(`[DEBUG] Creating networkpolicy ${name} in namespace ${namespace}`);
+						const createdNetworkPolicy = await networkingApi.createNamespacedNetworkPolicy({
+							namespace: namespace,
+							body: cleanedResourceData
+						});
+						console.log(`[DEBUG] NetworkPolicy created successfully:`, createdNetworkPolicy);
+						return createdNetworkPolicy;
+					} catch (error) {
+						console.error(`[DEBUG] NetworkPolicy creation failed:`, error);
+						throw new NodeOperationError(
+							this.func.getNode(),
+							`Failed to create networkpolicy "${name}" in namespace "${namespace}": ${error.message}`
+						);
+					}
+				default:
+					throw new NodeOperationError(
+						this.func.getNode(),
+						`Unsupported networking resource type: ${kind}`
+					);
+			}
+		} else {
+			// Handle custom resources
+			try {
+				console.log(`[DEBUG] Using CustomObjectsApi for ${apiVersion}/${kind}`);
+				const customObjectsApi = kc.makeApiClient(k8s.CustomObjectsApi);
+				const [group, version] = apiVersion.split('/');
+				console.log(`[DEBUG] Creating custom resource ${name} in namespace ${namespace} (group: ${group}, version: ${version})`);
+
+				const response = await customObjectsApi.createNamespacedCustomObject({
+					group: group,
+					version: version,
+					namespace: namespace,
+					plural: kind.toLowerCase() + 's', // Pluralize the kind
+					body: cleanedResourceData
+				});
+				console.log(`[DEBUG] Custom resource created successfully`);
+				return response.body;
+			} catch (error) {
+				console.error(`[DEBUG] Custom resource creation failed:`, error);
+				throw new NodeOperationError(
+					this.func.getNode(),
+					`Failed to create custom resource "${name}" in namespace "${namespace}": ${error.message}`
+				);
+			}
+		}
+	}
+
+	// Helper method to clean resource data by removing runtime fields
+	private cleanResourceData(resourceData: any): any {
+		if (!resourceData || typeof resourceData !== 'object') {
+			return resourceData;
+		}
+
+		// Create a deep copy to avoid modifying the original
+		const cleaned = JSON.parse(JSON.stringify(resourceData));
+
+		// Remove runtime fields from metadata
+		if (cleaned.metadata) {
+			// Remove runtime fields that should not be present when creating resources
+			delete cleaned.metadata.creationTimestamp;
+			delete cleaned.metadata.deletionTimestamp;
+			delete cleaned.metadata.resourceVersion;
+			delete cleaned.metadata.uid;
+			delete cleaned.metadata.generation;
+			delete cleaned.metadata.managedFields;
+			delete cleaned.metadata.ownerReferences;
+			delete cleaned.metadata.finalizers;
+			delete cleaned.metadata.selfLink;
+			
+			// Clean annotations and labels that might cause issues
+			if (cleaned.metadata.annotations) {
+				// Remove kubectl and system annotations
+				delete cleaned.metadata.annotations['kubectl.kubernetes.io/last-applied-configuration'];
+				delete cleaned.metadata.annotations['deployment.kubernetes.io/revision'];
+				
+				// Remove empty annotations object
+				if (Object.keys(cleaned.metadata.annotations).length === 0) {
+					delete cleaned.metadata.annotations;
+				}
+			}
+		}
+
+		// Remove status field entirely (runtime data)
+		delete cleaned.status;
+
+		// Clean spec for specific resource types
+		if (cleaned.spec) {
+			// For pods, remove nodeName and other runtime fields
+			if (cleaned.kind === 'Pod' || cleaned.kind === 'pod') {
+				delete cleaned.spec.nodeName;
+				
+				// Clean container fields
+				if (cleaned.spec.containers) {
+					cleaned.spec.containers.forEach((container: any) => {
+						// Remove runtime fields from containers
+						delete container.terminationMessagePath;
+						delete container.terminationMessagePolicy;
+					});
+				}
+				
+				// Clean template metadata if it exists
+				if (cleaned.spec.template?.metadata) {
+					delete cleaned.spec.template.metadata.creationTimestamp;
+				}
+			}
+			
+			// For deployments, clean template metadata
+			if (cleaned.kind === 'Deployment' || cleaned.kind === 'deployment') {
+				if (cleaned.spec.template?.metadata) {
+					delete cleaned.spec.template.metadata.creationTimestamp;
+				}
+			}
+		}
+
+		console.log(`[DEBUG] Cleaned resource data, removed runtime fields`);
+		return cleaned;
+	}
 }

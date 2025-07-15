@@ -87,6 +87,12 @@ export class Kubernetes implements INodeType {
 						description: "Wait for a resource to reach a specific condition",
 						action: 'Wait for a resource to reach a specific condition',
 					},
+					{
+						name: "Create Resource",
+						value: "create",
+						description: "Create a Kubernetes resource from JSON",
+						action: 'Create a kubernetes resource from JSON',
+					},
 				],
 				default: "run",
 			},
@@ -540,6 +546,82 @@ export class Kubernetes implements INodeType {
 				},
 				description: "Only return logs after this time (RFC3339 format, e.g., 2024-01-01T00:00:00Z)",
 			},
+			// Create Resource parameters
+			{
+				displayName: "Resource JSON",
+				name: "createResourceJson",
+				type: "json",
+				default: "{}",
+				displayOptions: {
+					show: {
+						operation: ["create"],
+					},
+				},
+				description: "Complete Kubernetes resource definition in JSON format",
+			},
+			{
+				displayName: "Namespace",
+				name: "createNamespace",
+				type: "string",
+				default: "default",
+				displayOptions: {
+					show: {
+						operation: ["create"],
+					},
+				},
+				description: "Kubernetes namespace for the resource (will override namespace in JSON if provided)",
+			},
+			{
+				displayName: "Watch Condition",
+				name: "createWatchCondition",
+				type: "options",
+				options: [
+					{
+						name: "None",
+						value: "none",
+					},
+					{
+						name: "Available",
+						value: "Available",
+					},
+					{
+						name: "Complete",
+						value: "Complete",
+					},
+					{
+						name: "Failed",
+						value: "Failed",
+					},
+					{
+						name: "Ready",
+						value: "Ready",
+					},
+					{
+						name: "Succeeded",
+						value: "Succeeded",
+					},
+				],
+				default: "none",
+				displayOptions: {
+					show: {
+						operation: ["create"],
+					},
+				},
+				description: "Optional condition to wait for after creating the resource",
+			},
+			{
+				displayName: "Watch Timeout (Seconds)",
+				name: "createWatchTimeout",
+				type: "number",
+				default: 300,
+				displayOptions: {
+					show: {
+						operation: ["create"],
+						createWatchCondition: ["Available", "Complete", "Failed", "Ready", "Succeeded"],
+					},
+				},
+				description: "Timeout in seconds for watching the condition",
+			},
 		],
 	};
 
@@ -799,6 +881,111 @@ export class Kubernetes implements INodeType {
 						container: logsContainer || "default",
 						logs: logs,
 					};
+				} else if (operation === "create") {
+					const createResourceJson = this.getNodeParameter("createResourceJson", idx, "{}") as string;
+					const createNamespace = this.getNodeParameter("createNamespace", idx, "default") as string;
+					const createWatchCondition = this.getNodeParameter("createWatchCondition", idx, "none") as string;
+					
+					// Only get timeout if watch condition is not "none"
+					let createWatchTimeout = 300000; // Default 5 minutes
+					if (createWatchCondition && createWatchCondition !== "none") {
+						try {
+							createWatchTimeout = (this.getNodeParameter("createWatchTimeout", idx, 300) as number) * 1000; // Convert to milliseconds
+						} catch (error) {
+							// If parameter doesn't exist, use default
+							createWatchTimeout = 300000;
+						}
+					}
+
+					let resourceData: any;
+					try {
+						resourceData = JSON.parse(createResourceJson);
+					} catch (error) {
+						throw new NodeOperationError(
+							this.getNode(),
+							"Resource JSON must be valid JSON!"
+						);
+					}
+
+					if (!resourceData || typeof resourceData !== 'object') {
+						throw new NodeOperationError(
+							this.getNode(),
+							"Resource JSON must be a valid object!"
+						);
+					}
+
+					// Validate required fields
+					if (!resourceData.apiVersion) {
+						throw new NodeOperationError(
+							this.getNode(),
+							"Resource JSON must contain 'apiVersion' field!"
+						);
+					}
+
+					if (!resourceData.kind) {
+						throw new NodeOperationError(
+							this.getNode(),
+							"Resource JSON must contain 'kind' field!"
+						);
+					}
+
+					if (!resourceData.metadata) {
+						throw new NodeOperationError(
+							this.getNode(),
+							"Resource JSON must contain 'metadata' field!"
+						);
+					}
+
+					if (!resourceData.metadata.name) {
+						throw new NodeOperationError(
+							this.getNode(),
+							"Resource JSON must contain 'metadata.name' field!"
+						);
+					}
+
+					// Override namespace if provided
+					if (createNamespace && createNamespace !== "default") {
+						if (!resourceData.metadata) {
+							resourceData.metadata = {};
+						}
+						resourceData.metadata.namespace = createNamespace;
+					} else if (!resourceData.metadata.namespace) {
+						resourceData.metadata.namespace = "default";
+					}
+
+					// Create the resource
+					const createdResource = await k8s.createResource(
+						resourceData.apiVersion,
+						resourceData.kind,
+						resourceData.metadata.name,
+						resourceData.metadata.namespace,
+						resourceData
+					);
+
+					// If watch condition is specified, wait for it
+					if (createWatchCondition && createWatchCondition !== "none") {
+						const watchResult = await k8s.waitForResource(
+							resourceData.apiVersion,
+							resourceData.kind,
+							resourceData.metadata.name,
+							resourceData.metadata.namespace,
+							createWatchCondition,
+							createWatchTimeout
+						);
+
+						data = {
+							resource: createdResource,
+							watchResult: watchResult,
+							watchCondition: createWatchCondition,
+							conditionMet: true,
+						};
+					} else {
+						data = {
+							resource: createdResource,
+							watchCondition: "none",
+							conditionMet: false,
+						};
+					}
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
