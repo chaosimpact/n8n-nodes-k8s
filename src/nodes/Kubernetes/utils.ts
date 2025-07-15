@@ -1193,6 +1193,129 @@ export class K8SClient {
 		});
 	}
 
+	async getLogsByLabelSelector(
+		labelSelector: string,
+		namespace: string,
+		containerName?: string,
+		follow = false,
+		tail?: number,
+		sinceTime?: string
+	): Promise<any> {
+		console.log(`[DEBUG] getLogsByLabelSelector called with:`, {
+			labelSelector,
+			namespace,
+			containerName,
+			follow,
+			tail,
+			sinceTime
+		});
+
+		const k8sCoreApi = this.kubeConfig.makeApiClient(k8s.CoreV1Api);
+
+		// First, find all pods that match the label selector
+		let podsResponse;
+		try {
+			console.log(`[DEBUG] Searching for pods with label selector: ${labelSelector}`);
+			podsResponse = await k8sCoreApi.listNamespacedPod({
+				namespace: namespace,
+				labelSelector: labelSelector
+			});
+		} catch (error) {
+			console.error(`[DEBUG] Failed to list pods with label selector ${labelSelector}:`, error);
+			throw new NodeOperationError(
+				this.func.getNode(),
+				`Failed to list pods with label selector "${labelSelector}" in namespace "${namespace}": ${error.message}`
+			);
+		}
+
+		console.log(`[DEBUG] Found ${podsResponse.items?.length || 0} pods matching label selector`);
+
+		if (!podsResponse.items || podsResponse.items.length === 0) {
+			console.log(`[DEBUG] No pods found matching label selector ${labelSelector}`);
+			return {
+				podsFound: 0,
+				pods: [],
+				totalLogs: "No pods found matching the label selector"
+			};
+		}
+
+		// Get logs from all matching pods
+		const podLogs: any[] = [];
+		let allLogs = "";
+
+		for (const pod of podsResponse.items) {
+			const podName = pod.metadata?.name;
+			if (!podName) {
+				console.warn(`[DEBUG] Pod found without name, skipping`);
+				continue;
+			}
+
+			console.log(`[DEBUG] Getting logs for pod: ${podName}`);
+
+			try {
+				// Determine container name if not provided
+				let targetContainerName = containerName;
+				if (!targetContainerName) {
+					if (pod.spec?.containers && pod.spec.containers.length > 0) {
+						targetContainerName = pod.spec.containers[0].name;
+						console.log(`[DEBUG] Using first container for pod ${podName}: ${targetContainerName}`);
+					} else {
+						console.warn(`[DEBUG] Pod ${podName} has no containers, skipping`);
+						continue;
+					}
+				}
+
+				// Get logs for this pod
+				const logs = await this.retrievePodLogs(podName, namespace, targetContainerName, {
+					follow,
+					tailLines: tail,
+					sinceTime
+				});
+
+				const podLogEntry = {
+					podName: podName,
+					container: targetContainerName,
+					logs: logs,
+					phase: pod.status?.phase || "Unknown"
+				};
+
+				podLogs.push(podLogEntry);
+
+				// Concatenate all logs with pod identification
+				allLogs += `\n=== Pod: ${podName} (${targetContainerName}) ===\n`;
+				allLogs += logs;
+				allLogs += `\n=== End of ${podName} logs ===\n`;
+
+			} catch (error) {
+				console.error(`[DEBUG] Failed to get logs for pod ${podName}:`, error);
+				const podLogEntry = {
+					podName: podName,
+					container: containerName || "unknown",
+					logs: `Error getting logs: ${error.message}`,
+					phase: pod.status?.phase || "Unknown",
+					error: error.message
+				};
+				podLogs.push(podLogEntry);
+
+				// Include error in combined logs
+				allLogs += `\n=== Pod: ${podName} (Error) ===\n`;
+				allLogs += `Error getting logs: ${error.message}\n`;
+				allLogs += `=== End of ${podName} logs ===\n`;
+			}
+		}
+
+		const result = {
+			podsFound: podsResponse.items.length,
+			pods: podLogs,
+			totalLogs: allLogs.trim(),
+			labelSelector: labelSelector,
+			namespace: namespace
+		};
+
+		console.log(`[DEBUG] Retrieved logs from ${podLogs.length} pods`);
+		return result;
+	}
+
 	// Helper method to format output - try JSON parse first, fallback to raw string
 	private formatOutput(output: any): any {
 		// Handle non-string inputs

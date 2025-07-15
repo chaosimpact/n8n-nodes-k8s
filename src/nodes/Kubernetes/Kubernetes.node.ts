@@ -475,6 +475,28 @@ export class Kubernetes implements INodeType {
 			},
 			// Get Logs parameters
 			{
+				displayName: "Pod Selection Method",
+				name: "logsPodSelectionMethod",
+				type: "options",
+				options: [
+					{
+						name: "Pod Name",
+						value: "podName",
+					},
+					{
+						name: "Label Selector",
+						value: "labelSelector",
+					},
+				],
+				default: "podName",
+				displayOptions: {
+					show: {
+						operation: ["logs"],
+					},
+				},
+				description: "Method to select pod(s) for log retrieval",
+			},
+			{
 				displayName: "Pod Name",
 				name: "logsPodName",
 				type: "string",
@@ -482,9 +504,23 @@ export class Kubernetes implements INodeType {
 				displayOptions: {
 					show: {
 						operation: ["logs"],
+						logsPodSelectionMethod: ["podName"],
 					},
 				},
 				description: "Name of the pod to get logs from",
+			},
+			{
+				displayName: "Label Selector",
+				name: "logsLabelSelector",
+				type: "string",
+				default: "",
+				displayOptions: {
+					show: {
+						operation: ["logs"],
+						logsPodSelectionMethod: ["labelSelector"],
+					},
+				},
+				description: "Label selector to select pod(s) (e.g., app=myapp,version=v1)",
 			},
 			{
 				displayName: "Namespace",
@@ -496,7 +532,7 @@ export class Kubernetes implements INodeType {
 						operation: ["logs"],
 					},
 				},
-				description: "Kubernetes namespace for the pod",
+				description: "Kubernetes namespace for the pod(s)",
 			},
 			{
 				displayName: "Container Name",
@@ -857,7 +893,7 @@ export class Kubernetes implements INodeType {
 						waitTimeout
 					);
 				} else if (operation === "logs") {
-					const logsPodName = this.getNodeParameter("logsPodName", idx) as string;
+					const logsPodSelectionMethod = this.getNodeParameter("logsPodSelectionMethod", idx, "podName") as string;
 					const logsNamespace =
 						(this.getNodeParameter("logsNamespace", idx) as string) ??
 						"default";
@@ -866,21 +902,63 @@ export class Kubernetes implements INodeType {
 					const logsTail = this.getNodeParameter("logsTail", idx) as number;
 					const logsSinceTime = this.getNodeParameter("logsSinceTime", idx) as string;
 
-					const logs = await k8s.getLogs(
-						logsPodName,
-						logsNamespace,
-						logsContainer || undefined,
-						logsFollow,
-						logsTail,
-						logsSinceTime || undefined
-					);
+					let logsResult: any;
 
-					data = {
-						podName: logsPodName,
-						namespace: logsNamespace,
-						container: logsContainer || "default",
-						logs: logs,
-					};
+					if (logsPodSelectionMethod === "podName") {
+						const logsPodName = this.getNodeParameter("logsPodName", idx) as string;
+						
+						if (!logsPodName || logsPodName.trim() === "") {
+							throw new NodeOperationError(
+								this.getNode(),
+								"Pod name is required when using pod name selection method!"
+							);
+						}
+
+						const logs = await k8s.getLogs(
+							logsPodName,
+							logsNamespace,
+							logsContainer || undefined,
+							logsFollow,
+							logsTail,
+							logsSinceTime || undefined
+						);
+
+						logsResult = {
+							podName: logsPodName,
+							namespace: logsNamespace,
+							container: logsContainer || "default",
+							logs: logs,
+							selectionMethod: "podName",
+						};
+					} else if (logsPodSelectionMethod === "labelSelector") {
+						const logsLabelSelector = this.getNodeParameter("logsLabelSelector", idx) as string;
+						
+						if (!logsLabelSelector || logsLabelSelector.trim() === "") {
+							throw new NodeOperationError(
+								this.getNode(),
+								"Label selector is required when using label selector selection method!"
+							);
+						}
+
+						const logs = await k8s.getLogsByLabelSelector(
+							logsLabelSelector,
+							logsNamespace,
+							logsContainer || undefined,
+							logsFollow,
+							logsTail,
+							logsSinceTime || undefined
+						);
+
+						logsResult = {
+							labelSelector: logsLabelSelector,
+							namespace: logsNamespace,
+							container: logsContainer || "default",
+							logs: logs,
+							selectionMethod: "labelSelector",
+						};
+					}
+
+					data = logsResult;
 				} else if (operation === "create") {
 					const createResourceJson = this.getNodeParameter("createResourceJson", idx, "{}") as string;
 					const createNamespace = this.getNodeParameter("createNamespace", idx, "default") as string;
