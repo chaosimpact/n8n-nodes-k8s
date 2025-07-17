@@ -1096,6 +1096,34 @@ export class K8SClient {
 							conditionMet = obj.status?.phase === 'Succeeded';
 						} else if (condition === 'Failed' && kind.toLowerCase() === 'pod') {
 							conditionMet = obj.status?.phase === 'Failed';
+						} else if (kind.toLowerCase() === 'statefulset') {
+							// StatefulSet doesn't have conditions, check based on replica status
+							const replicas = obj.spec?.replicas || 0;
+							const readyReplicas = obj.status?.readyReplicas || 0;
+							const currentReplicas = obj.status?.currentReplicas || 0;
+							const updatedReplicas = obj.status?.updatedReplicas || 0;
+							
+							console.log(`[DEBUG] StatefulSet ${obj.metadata?.name} status:`, {
+								replicas,
+								readyReplicas,
+								currentReplicas,
+								updatedReplicas,
+								condition
+							});
+
+							if (condition === 'Ready' || condition === 'Available') {
+								// Ready when all replicas are ready
+								conditionMet = replicas > 0 && readyReplicas === replicas;
+							} else if (condition === 'Complete') {
+								// Complete when all replicas are current and updated
+								conditionMet = replicas > 0 && currentReplicas === replicas && updatedReplicas === replicas;
+							} else if (condition === 'Succeeded') {
+								// Succeeded when all replicas are ready and updated
+								conditionMet = replicas > 0 && readyReplicas === replicas && updatedReplicas === replicas;
+							} else {
+								// Default: consider ready when all replicas are ready
+								conditionMet = replicas > 0 && readyReplicas === replicas;
+							}
 						} else {
 							// Generic condition check
 							const conditions = obj.status?.conditions || [];
