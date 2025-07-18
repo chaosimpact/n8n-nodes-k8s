@@ -319,18 +319,90 @@ export class K8SClient {
 					: `Job failed. ${jobStatus.failed} pod(s) failed.`;
 			}
 
-			// Cleanup job if requested
+			// Variable for tracking number of pods deleted
+			let podsDeleted = 0;
+
+			// Cleanup job and its pods if requested
 			if (cleanupJob) {
-				console.log(`[DEBUG] Cleaning up job ${finalJobName}`);
+				console.log(`[DEBUG] Cleaning up job ${finalJobName} and its pods`);
+
+				// Create a Core API client for Pod operations
+				const k8sCoreApi = kc.makeApiClient(k8s.CoreV1Api);
+				let podsDeleted = 0;
+
+				// First, try to find and delete all pods created by this job
 				try {
+					console.log(`[DEBUG] Finding pods with label job-name=${finalJobName}`);
+										const podListResponse = await k8sCoreApi.listNamespacedPod({
+						namespace: namespace,
+						labelSelector: `job-name=${finalJobName}`
+					});
+
+					const pods = podListResponse.items || [];
+					console.log(`[DEBUG] Found ${pods.length} pods to clean up for job ${finalJobName}`);
+
+					// Delete each pod found
+					for (const pod of pods) {
+						const podName = pod.metadata?.name;
+						if (podName) {
+							try {
+								console.log(`[DEBUG] Deleting pod ${podName} in namespace ${namespace}`);
+								await k8sCoreApi.deleteNamespacedPod({
+									name: podName,
+									namespace: namespace
+								});
+								podsDeleted++;
+								console.log(`[DEBUG] Pod ${podName} deleted successfully`);
+							} catch (podCleanupErr) {
+								console.warn(`[DEBUG] Failed to delete pod ${podName}:`, podCleanupErr);
+							}
+						}
+					}
+				} catch (podListErr) {
+					console.warn(`[DEBUG] Failed to list pods for job ${finalJobName}:`, podListErr);
+					// Try fallback with batch.kubernetes.io/job-name label if standard label fails
+					try {
+												const fallbackResponse = await k8sCoreApi.listNamespacedPod({
+							namespace: namespace,
+							labelSelector: `batch.kubernetes.io/job-name=${finalJobName}`
+						});
+
+						const fallbackPods = fallbackResponse.items || [];
+						console.log(`[DEBUG] Fallback: Found ${fallbackPods.length} pods with batch.kubernetes.io/job-name label`);
+
+						// Delete each pod found with fallback label
+						for (const pod of fallbackPods) {
+							const podName = pod.metadata?.name;
+							if (podName) {
+								try {
+									console.log(`[DEBUG] Deleting pod ${podName} in namespace ${namespace}`);
+									await k8sCoreApi.deleteNamespacedPod({
+										name: podName,
+										namespace: namespace
+									});
+									podsDeleted++;
+									console.log(`[DEBUG] Pod ${podName} deleted successfully`);
+								} catch (podCleanupErr) {
+									console.warn(`[DEBUG] Failed to delete pod ${podName}:`, podCleanupErr);
+								}
+							}
+						}
+					} catch (fallbackErr) {
+						console.warn(`[DEBUG] Fallback pod listing also failed:`, fallbackErr);
+					}
+				}
+
+				// Then delete the job itself
+				try {
+					console.log(`[DEBUG] Deleting job ${finalJobName} in namespace ${namespace}`);
 					await k8sBatchApi.deleteNamespacedJob({
 						name: finalJobName,
 						namespace: namespace
 					});
-					console.log(`[DEBUG] Job ${finalJobName} cleaned up successfully`);
-				} catch (cleanupErr) {
+					console.log(`[DEBUG] Job ${finalJobName} cleaned up successfully with ${podsDeleted} pod(s) also deleted`);
+				} catch (jobCleanupErr) {
 					// Don't fail the whole operation if cleanup fails
-					console.warn(`[DEBUG] Failed to cleanup job ${finalJobName}:`, cleanupErr);
+					console.warn(`[DEBUG] Failed to delete job ${finalJobName}:`, jobCleanupErr);
 				}
 			}
 
@@ -341,6 +413,7 @@ export class K8SClient {
 				jobStatus: status,
 				output: this.formatOutput(output),
 				cleaned: cleanupJob,
+				podsDeleted: cleanupJob ? podsDeleted : 0
 			};
 
 			console.log(`[DEBUG] Job ${finalJobName} completed successfully with result:`, result);
@@ -356,6 +429,7 @@ export class K8SClient {
 					jobStatus: "unknown",
 					output: "Job watch was aborted",
 					cleaned: false,
+					podsDeleted: 0
 				};
 			} else {
 				console.error(`[DEBUG] Error running job ${finalJobName}:`, e);
@@ -1699,18 +1773,90 @@ export class K8SClient {
 					: `Job failed. ${jobStatus.failed} pod(s) failed.`;
 			}
 
-			// Cleanup job if requested
+			// Variable for tracking number of pods deleted
+			let podsDeleted = 0;
+
+			// Cleanup job and its pods if requested
 			if (cleanupJob) {
-				console.log(`[DEBUG] Cleaning up job ${finalJobName}`);
+				console.log(`[DEBUG] Cleaning up job ${finalJobName} and its pods`);
+
+				// Create a Core API client for Pod operations
+				const k8sCoreApi = kc.makeApiClient(k8s.CoreV1Api);
+				let podsDeleted = 0;
+
+				// First, try to find and delete all pods created by this job
 				try {
+					console.log(`[DEBUG] Finding pods with label job-name=${finalJobName}`);
+					const podListResponse = await k8sCoreApi.listNamespacedPod({
+						namespace: namespace,
+						labelSelector: `job-name=${finalJobName}`
+					});
+
+					const pods = podListResponse.items || [];
+					console.log(`[DEBUG] Found ${pods.length} pods to clean up for job ${finalJobName}`);
+
+					// Delete each pod found
+					for (const pod of pods) {
+						const podName = pod.metadata?.name;
+						if (podName) {
+							try {
+								console.log(`[DEBUG] Deleting pod ${podName} in namespace ${namespace}`);
+								await k8sCoreApi.deleteNamespacedPod({
+									name: podName,
+									namespace: namespace
+								});
+								podsDeleted++;
+								console.log(`[DEBUG] Pod ${podName} deleted successfully`);
+							} catch (podCleanupErr) {
+								console.warn(`[DEBUG] Failed to delete pod ${podName}:`, podCleanupErr);
+							}
+						}
+					}
+				} catch (podListErr) {
+					console.warn(`[DEBUG] Failed to list pods for job ${finalJobName}:`, podListErr);
+					// Try fallback with batch.kubernetes.io/job-name label if standard label fails
+					try {
+						const fallbackResponse = await k8sCoreApi.listNamespacedPod({
+							namespace: namespace,
+							labelSelector: `batch.kubernetes.io/job-name=${finalJobName}`
+						});
+
+						const fallbackPods = fallbackResponse.items || [];
+						console.log(`[DEBUG] Fallback: Found ${fallbackPods.length} pods with batch.kubernetes.io/job-name label`);
+
+						// Delete each pod found with fallback label
+						for (const pod of fallbackPods) {
+							const podName = pod.metadata?.name;
+							if (podName) {
+								try {
+									console.log(`[DEBUG] Deleting pod ${podName} in namespace ${namespace}`);
+									await k8sCoreApi.deleteNamespacedPod({
+										name: podName,
+										namespace: namespace
+									});
+									podsDeleted++;
+									console.log(`[DEBUG] Pod ${podName} deleted successfully`);
+								} catch (podCleanupErr) {
+									console.warn(`[DEBUG] Failed to delete pod ${podName}:`, podCleanupErr);
+								}
+							}
+						}
+					} catch (fallbackErr) {
+						console.warn(`[DEBUG] Fallback pod listing also failed:`, fallbackErr);
+					}
+				}
+
+				// Then delete the job itself
+				try {
+					console.log(`[DEBUG] Deleting job ${finalJobName} in namespace ${namespace}`);
 					await k8sBatchApi.deleteNamespacedJob({
 						name: finalJobName,
 						namespace: namespace
 					});
-					console.log(`[DEBUG] Job ${finalJobName} cleaned up successfully`);
-				} catch (cleanupErr) {
+					console.log(`[DEBUG] Job ${finalJobName} cleaned up successfully with ${podsDeleted} pod(s) also deleted`);
+				} catch (jobCleanupErr) {
 					// Don't fail the whole operation if cleanup fails
-					console.warn(`[DEBUG] Failed to cleanup job ${finalJobName}:`, cleanupErr);
+					console.warn(`[DEBUG] Failed to delete job ${finalJobName}:`, jobCleanupErr);
 				}
 			}
 
@@ -1723,7 +1869,8 @@ export class K8SClient {
 				createdAt: new Date().toISOString(),
 				output: this.formatOutput(output),
 				cleaned: cleanupJob,
-				overridesApplied: !!overrides
+				overridesApplied: !!overrides,
+				podsDeleted: cleanupJob ? podsDeleted : 0
 			};
 
 			console.log(`[DEBUG] CronJob ${cronJobName} triggered successfully with result:`, result);
@@ -1740,7 +1887,8 @@ export class K8SClient {
 					jobStatus: "unknown",
 					output: "Job watch was aborted",
 					cleaned: false,
-					overridesApplied: !!overrides
+					overridesApplied: !!overrides,
+					podsDeleted: 0
 				};
 			} else {
 				console.error(`[DEBUG] Error running job ${finalJobName}:`, e);
