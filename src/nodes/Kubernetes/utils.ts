@@ -337,7 +337,8 @@ export class K8SClient {
 			const result = {
 				jobName: finalJobName,
 				namespace: namespace,
-				status: "completed",
+				status: status === "succeeded" ? "completed" : "failed",
+				jobStatus: status,
 				output: this.formatOutput(output),
 				cleaned: cleanupJob,
 			};
@@ -352,6 +353,7 @@ export class K8SClient {
 					jobName: finalJobName,
 					namespace: namespace,
 					status: "unknown",
+					jobStatus: "unknown",
 					output: "Job watch was aborted",
 					cleaned: false,
 				};
@@ -1716,7 +1718,8 @@ export class K8SClient {
 				jobName: finalJobName,
 				namespace: namespace,
 				cronJobName: cronJobName,
-				status: "completed",
+				status: status === "succeeded" ? "completed" : "failed",
+				jobStatus: status,
 				createdAt: new Date().toISOString(),
 				output: this.formatOutput(output),
 				cleaned: cleanupJob,
@@ -1734,6 +1737,7 @@ export class K8SClient {
 					namespace: namespace,
 					cronJobName: cronJobName,
 					status: "unknown",
+					jobStatus: "unknown",
 					output: "Job watch was aborted",
 					cleaned: false,
 					overridesApplied: !!overrides
