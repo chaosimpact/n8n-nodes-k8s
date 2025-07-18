@@ -7,12 +7,9 @@ import {
 	NodeOperationError,
 } from "n8n-workflow";
 
-// Helper types
-interface SafePromiseHandlers {
-	safeResolve: (value: any) => void;
-	safeReject: (err: any) => void;
-}
+import { OutputHelper } from "./helpers";
 
+// Helper types
 interface LogOptions {
 	follow?: boolean;
 	tailLines?: number;
@@ -21,8 +18,22 @@ interface LogOptions {
 	sinceTime?: string;
 }
 
+interface JobResult {
+	jobName: string;
+	namespace: string;
+	status: string;
+	jobStatus?: string;
+	output: any;
+	cleaned?: boolean;
+	podsDeleted?: number;
+	cronJobName?: string;
+	createdAt?: string;
+	overridesApplied?: boolean;
+}
+
 export class K8SClient {
 	kubeConfig: k8s.KubeConfig;
+
 	constructor(
 		credentials: ICredentialDataDecryptedObject,
 		private readonly func: IExecuteFunctions
@@ -203,7 +214,7 @@ export class K8SClient {
 		namespace = "default",
 		restartPolicy = "Never",
 		cleanupJob = true
-	): Promise<any> {
+	): Promise<JobResult> {
 		const kc = this.kubeConfig;
 		const k8sBatchApi = kc.makeApiClient(k8s.BatchV1Api);
 
@@ -1455,29 +1466,9 @@ export class K8SClient {
 		}
 	}
 
-	// Helper to create safe promise handlers that prevent multiple resolve/reject
-	private createSafePromiseHandlers(resolve: Function, reject: Function): SafePromiseHandlers {
-		let resolved = false;
-
-		return {
-			safeResolve: (value: any) => {
-				if (!resolved) {
-					resolved = true;
-					resolve(value);
-				}
-			},
-			safeReject: (err: any) => {
-				if (!resolved) {
-					resolved = true;
-					reject(err);
-				}
-			}
-		};
-	}
-
 	// Helper to check if error is an expected abort error
 	private isExpectedAbortError(err: any, completed: boolean): boolean {
-		return (err.message === "aborted" || err.type === "aborted") && completed;
+		return OutputHelper.isExpectedAbortError(err, completed);
 	}
 
 	// Helper to validate time format
@@ -1505,7 +1496,7 @@ export class K8SClient {
 
 		return new Promise((resolve, reject) => {
 			let logs = "";
-			const { safeResolve, safeReject } = this.createSafePromiseHandlers(resolve, reject);
+			const { safeResolve, safeReject } = OutputHelper.createSafePromiseHandlers(resolve, reject);
 
 			const logStream = new PassThrough();
 			logStream.on('data', (chunk) => {
@@ -1514,7 +1505,7 @@ export class K8SClient {
 
 			logStream.on('end', () => {
 				console.log(`[DEBUG] Log stream ended for pod ${podName}. Logs length: ${logs.length}`);
-				safeResolve(this.formatOutput(logs));
+				safeResolve(OutputHelper.formatOutput(logs));
 			});
 
 			logStream.on('error', (err) => {
@@ -1566,7 +1557,7 @@ export class K8SClient {
 						req.abort();
 					}
 					logStream.end();
-					safeResolve(this.formatOutput(logs));
+					safeResolve(OutputHelper.formatOutput(logs));
 				}, timeoutMs);
 			}).catch((err) => {
 				console.error(`[DEBUG] Log API error for pod ${podName}:`, err);

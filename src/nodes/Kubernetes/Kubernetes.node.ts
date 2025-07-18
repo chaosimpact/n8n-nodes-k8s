@@ -40,6 +40,12 @@ export class Kubernetes implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
+						name: "Create Resource",
+						value: "create",
+						description: "Create a Kubernetes resource from JSON",
+						action: 'Create a kubernetes resource from JSON',
+					},
+					{
 						name: "Get Logs",
 						value: "logs",
 						description: "Get logs from a pod",
@@ -86,12 +92,6 @@ export class Kubernetes implements INodeType {
 						value: "wait",
 						description: "Wait for a resource to reach a specific condition",
 						action: 'Wait for a resource to reach a specific condition',
-					},
-					{
-						name: "Create Resource",
-						value: "create",
-						description: "Create a Kubernetes resource from JSON",
-						action: 'Create a kubernetes resource from JSON',
 					},
 				],
 				default: "run",
@@ -613,10 +613,6 @@ export class Kubernetes implements INodeType {
 				type: "options",
 				options: [
 					{
-						name: "None",
-						value: "none",
-					},
-					{
 						name: "Available",
 						value: "Available",
 					},
@@ -627,6 +623,10 @@ export class Kubernetes implements INodeType {
 					{
 						name: "Failed",
 						value: "Failed",
+					},
+					{
+						name: "None",
+						value: "none",
 					},
 					{
 						name: "Ready",
@@ -906,7 +906,7 @@ export class Kubernetes implements INodeType {
 
 					if (logsPodSelectionMethod === "podName") {
 						const logsPodName = this.getNodeParameter("logsPodName", idx) as string;
-						
+
 						if (!logsPodName || logsPodName.trim() === "") {
 							throw new NodeOperationError(
 								this.getNode(),
@@ -932,7 +932,7 @@ export class Kubernetes implements INodeType {
 						};
 					} else if (logsPodSelectionMethod === "labelSelector") {
 						const logsLabelSelector = this.getNodeParameter("logsLabelSelector", idx) as string;
-						
+
 						if (!logsLabelSelector || logsLabelSelector.trim() === "") {
 							throw new NodeOperationError(
 								this.getNode(),
@@ -963,7 +963,7 @@ export class Kubernetes implements INodeType {
 					const createResourceJson = this.getNodeParameter("createResourceJson", idx, "{}") as string;
 					const createNamespace = this.getNodeParameter("createNamespace", idx, "default") as string;
 					const createWatchCondition = this.getNodeParameter("createWatchCondition", idx, "none") as string;
-					
+
 					// Only get timeout if watch condition is not "none"
 					let createWatchTimeout = 300000; // Default 5 minutes
 					if (createWatchCondition && createWatchCondition !== "none") {
