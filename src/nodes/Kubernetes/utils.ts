@@ -93,6 +93,9 @@ export class K8SClient {
 		const podSpec: k8s.V1Pod = {
 			metadata: {
 				name: podName,
+				labels: {
+					"managed-by-automation": "n8n"
+				}
 			},
 			spec: {
 				restartPolicy: "Never",
@@ -258,9 +261,17 @@ export class K8SClient {
 		const jobSpec: k8s.V1Job = {
 			metadata: {
 				name: finalJobName,
+				labels: {
+					"managed-by-automation": "n8n"
+				}
 			},
 			spec: {
 				template: {
+					metadata: {
+						labels: {
+							"managed-by-automation": "n8n"
+						}
+					},
 					spec: {
 						restartPolicy: restartPolicy as any,
 						containers: [
@@ -1102,7 +1113,7 @@ export class K8SClient {
 							const readyReplicas = obj.status?.readyReplicas || 0;
 							const currentReplicas = obj.status?.currentReplicas || 0;
 							const updatedReplicas = obj.status?.updatedReplicas || 0;
-							
+
 							console.log(`[DEBUG] StatefulSet ${obj.metadata?.name} status:`, {
 								replicas,
 								readyReplicas,
@@ -1626,7 +1637,8 @@ export class K8SClient {
 				labels: {
 					...jobTemplate.metadata?.labels,
 					"cronjob": cronJobName,
-					"manual-trigger": "true"
+					"manual-trigger": "true",
+					"managed-by-automation": "n8n"
 				},
 				annotations: {
 					...jobTemplate.metadata?.annotations,
@@ -1638,7 +1650,16 @@ export class K8SClient {
 			spec: {
 				...jobTemplate.spec,
 				// Ensure template is provided
-				template: jobTemplate.spec.template
+				template: {
+					...jobTemplate.spec.template,
+					metadata: {
+						...jobTemplate.spec.template.metadata,
+						labels: {
+							...(jobTemplate.spec.template.metadata?.labels || {}),
+							"managed-by-automation": "n8n"
+						}
+					}
+				}
 			}
 		};
 
@@ -1883,7 +1904,27 @@ export class K8SClient {
 
 		// Clean up the resource data by removing runtime fields
 		const cleanedResourceData = this.cleanResourceData(resourceData);
-		
+
+		// Add managed-by-automation label to the resource
+		if (!cleanedResourceData.metadata) {
+			cleanedResourceData.metadata = {};
+		}
+		if (!cleanedResourceData.metadata.labels) {
+			cleanedResourceData.metadata.labels = {};
+		}
+		cleanedResourceData.metadata.labels["managed-by-automation"] = "n8n";
+
+		// Add labels to template if it exists (for resources like Deployments, StatefulSets, etc.)
+		if (cleanedResourceData.spec && cleanedResourceData.spec.template) {
+			if (!cleanedResourceData.spec.template.metadata) {
+				cleanedResourceData.spec.template.metadata = {};
+			}
+			if (!cleanedResourceData.spec.template.metadata.labels) {
+				cleanedResourceData.spec.template.metadata.labels = {};
+			}
+			cleanedResourceData.spec.template.metadata.labels["managed-by-automation"] = "n8n";
+		}
+
 		console.log(`[DEBUG] Cleaned resource data:`, {
 			cleanedResourceData: JSON.stringify(cleanedResourceData, null, 2)
 		});
@@ -2204,13 +2245,13 @@ export class K8SClient {
 			delete cleaned.metadata.ownerReferences;
 			delete cleaned.metadata.finalizers;
 			delete cleaned.metadata.selfLink;
-			
+
 			// Clean annotations and labels that might cause issues
 			if (cleaned.metadata.annotations) {
 				// Remove kubectl and system annotations
 				delete cleaned.metadata.annotations['kubectl.kubernetes.io/last-applied-configuration'];
 				delete cleaned.metadata.annotations['deployment.kubernetes.io/revision'];
-				
+
 				// Remove empty annotations object
 				if (Object.keys(cleaned.metadata.annotations).length === 0) {
 					delete cleaned.metadata.annotations;
@@ -2226,7 +2267,7 @@ export class K8SClient {
 			// For pods, remove nodeName and other runtime fields
 			if (cleaned.kind === 'Pod' || cleaned.kind === 'pod') {
 				delete cleaned.spec.nodeName;
-				
+
 				// Clean container fields
 				if (cleaned.spec.containers) {
 					cleaned.spec.containers.forEach((container: any) => {
@@ -2235,13 +2276,13 @@ export class K8SClient {
 						delete container.terminationMessagePolicy;
 					});
 				}
-				
+
 				// Clean template metadata if it exists
 				if (cleaned.spec.template?.metadata) {
 					delete cleaned.spec.template.metadata.creationTimestamp;
 				}
 			}
-			
+
 			// For deployments, clean template metadata
 			if (cleaned.kind === 'Deployment' || cleaned.kind === 'deployment') {
 				if (cleaned.spec.template?.metadata) {
